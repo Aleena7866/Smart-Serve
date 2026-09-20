@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Sign In{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <div class="eyebrow">✓ TRUSTED SERVICE MARKETPLACE</div>
+    <h1>Welcome back 👋</h1>
+    <p>Sign in to book verified professionals, track services in real time and manage secure payments.</p>
+    <a class="google-btn" href="{{ url_for('google_login') }}"><span style="font-size:19px;color:#4285f4;font-weight:900">G</span> Continue with Google</a>
+    <div class="muted" style="text-align:center;margin-top:9px;font-size:9px">🔐 Secure Google OAuth session{% if not google_oauth_enabled %} · Add Google OAuth credentials to enable{% endif %}</div>
+    <div class="divider">or use email</div>
+    <form method="post">
+      <label style="font-size:10px;font-weight:800">Email</label><input class="input" type="email" name="email" required autocomplete="email">
+      <label style="font-size:10px;font-weight:800">Password</label><input class="input" type="password" name="password" required autocomplete="current-password">
+      <button class="primary-btn" style="width:100%">Sign in →</button>
+    </form>
+    <p style="text-align:center;margin-bottom:0">New to SmartServe? <a href="{{ url_for('register') }}" style="color:var(--blue);font-weight:800">Create account</a></p>
+    <div style="display:flex;justify-content:space-between;margin-top:22px;color:var(--muted);font-size:9px"><span>🔒 Secure session</span><span>📍 Live tracking</span><span>💳 Secure payments</span></div>
+  </div>
+</div>
+{% endblock %}

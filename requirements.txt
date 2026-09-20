@@ -1,0 +1,9 @@
+Flask
+google-genai
+python-dotenv
+Werkzeug
+razorpay
+Authlib
+gunicorn
+Flask-SocketIO
+simple-websocket

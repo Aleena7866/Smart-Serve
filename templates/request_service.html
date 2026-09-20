@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Book a Service{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="greeting"><div><div class="eyebrow">BOOK A SERVICE</div><h1>What do you need fixed?</h1><div class="muted">Choose Quick Booking for a direct request, or use Gemini when you want an AI diagnosis.</div></div><a class="outline-btn" href="{{ url_for('customer_dashboard') }}">Cancel</a></div>
+  <div class="mode-switch"><button id="quickTab" class="active" onclick="setMode('quick')">⚡ Quick Booking</button><button id="aiTab" onclick="setMode('ai')">🤖 AI Diagnosis</button></div>
+  <div id="quickPanel" class="form-card">
+    <h3 style="margin-top:0">Select a service</h3><p class="muted">No Gemini call. No compulsory description. Your budget and notes are optional.</p>
+    <form method="post" id="quickForm" enctype="multipart/form-data">
+      <input type="hidden" name="creation_mode" value="quick">
+      <div class="quick-booking">
+      {% set icons={'Plumbing':'🔧','Electrical':'⚡','Carpentry':'🔨','Cleaning':'🧹','Appliance Repair':'🔌','Mobile Repair':'📱','Laptop Repair':'💻','Basic IT Support':'🖥️','Delivery & Errands':'🛵'} %}
+      {% for service in services %}<button class="quick-option" type="button" data-service="{{ service['name'] }}" onclick="selectQuick('{{ service['name']|e }}',this)"><span style="font-size:22px">{{ icons.get(service['name'],'🛠️') }}</span><strong>{{ service['name'] }}</strong><span>{{ service['description'] }}</span></button>{% endfor %}
+      </div>
+      <input type="hidden" name="service_name" id="quickServiceName"><input type="hidden" name="quick_option" id="quickOption">
+      <div class="pin-location-box"><label>📍 PIN code / service area <span class="muted">required</span></label><div style="display:flex;gap:8px"><input class="input" id="quickPincode" name="pincode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="e.g. 585401" required><button class="outline-btn" type="button" onclick="previewPin('quickPincode','quickPinStatus','quickPinMap')">Show on map</button></div><div id="quickPinStatus" class="muted">Enter a 6-digit PIN to place the request on the map.</div><div id="quickPinMap" class="pin-map"></div></div>
+      <div id="quickDetails" style="display:none;margin-top:18px">
+        <label>What do you need? <span class="muted">Choose one</span></label>
+        <select class="input" id="quickOptionSelect" onchange="document.getElementById('quickOption').value=this.value"><option value="">Select an option</option></select>
+        <label>Estimated budget <span class="muted">optional</span></label><input class="input" name="customer_estimate" type="number" min="0" step="1" placeholder="₹ e.g. 500"><label>When do you need the service?</label><select class="input" id="bookingTiming" onchange="toggleScheduleField()"><option value="NOW" selected>⚡ Now — find a provider immediately</option><option value="SCHEDULED">📅 Schedule for later</option></select><div id="scheduleField" style="display:none"><label>Scheduled date & time</label><input class="input" id="scheduledAt" name="scheduled_at" type="datetime-local"><small class="muted">SmartServe will activate provider discovery automatically at this time.</small></div><div id="deliveryFields" style="display:none;gap:8px;margin:10px 0">
+<label>Pickup location</label><input class="input" name="pickup_address" placeholder="Shop / house / landmark">
+<label>Drop location</label><input class="input" name="drop_address" placeholder="Where should it be delivered?">
+<label>Delivery notes</label><input class="input" name="delivery_notes" placeholder="Item, quantity, fragile, instructions…">
+</div>
+<label>Extra note <span class="muted">optional</span></label><textarea class="input" name="quick_notes" placeholder="Anything the provider should know?"></textarea><label class="file-input">Photo <span class="muted">optional</span><input type="file" name="image" accept="image/*"></label><button class="primary-btn" type="submit">Create service request →</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="aiPanel" class="form-card" style="display:none;margin-top:12px">
+    <h3 style="margin-top:0">Describe your problem</h3><p class="muted">This path calls Gemini on the server, saves the AI analysis, and then lets you choose a nearby provider.</p>
+    <form id="aiForm" enctype="multipart/form-data">
+      <label>Service</label><select class="input" name="service_id" required>{% for s in services %}<option value="{{ s['id'] }}">{{ s['name'] }}</option>{% endfor %}</select>
+      <label>Problem description</label><textarea class="input" name="description" required placeholder="Example: kitchen tap is leaking continuously even when closed..."></textarea>
+      <div class="pin-location-box"><label>📍 PIN code / service area <span class="muted">required</span></label><div style="display:flex;gap:8px"><input class="input" id="aiPincode" name="pincode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="e.g. 585401" required><button class="outline-btn" type="button" onclick="previewPin('aiPincode','aiPinStatus','aiPinMap')">Show on map</button></div><div id="aiPinStatus" class="muted">Enter a 6-digit PIN to place the request on the map.</div><div id="aiPinMap" class="pin-map"></div></div>
+      <label class="file-input">Photo <span class="muted">optional</span><input type="file" name="image" accept="image/*"></label>
+      <div id="aiStatus" class="muted" style="margin:8px 0"></div><button class="primary-btn" type="submit" id="aiSubmit">Analyze with Gemini →</button>
+    </form>
+    <div id="aiResult" style="display:none;margin-top:18px" class="pay-box"></div>
+  </div>
+</div>
+
+<style>
+.pin-location-box{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+.pin-map{height:180px;border-radius:14px;overflow:hidden;margin-top:10px;display:none}
+</style>
+<script>
+let pinMaps={};
+async function previewPin(inputId,statusId,mapId){
+  const pin=document.getElementById(inputId).value.replace(/\D/g,'');
+  const status=document.getElementById(statusId), el=document.getElementById(mapId);
+  if(pin.length!==6){status.textContent='Enter exactly 6 digits.';return;}
+  status.textContent='Finding PIN location…';
+  try{
+    const r=await fetch('/api/location/pincode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pincode:pin})});
+    const d=await r.json(); if(!r.ok||!d.success)throw new Error(d.message||'PIN location not found');
+    status.textContent=`📍 ${d.label} · ${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)}`;
+    el.style.display='block';
+    if(!pinMaps[mapId]){pinMaps[mapId]=L.map(el).setView([d.latitude,d.longitude],13);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(pinMaps[mapId]);pinMaps[mapId]._pinMarker=L.marker([d.latitude,d.longitude]).addTo(pinMaps[mapId]).bindPopup(`<b>${d.label}</b><br>PIN ${d.pincode}`).openPopup();}
+    else{pinMaps[mapId].setView([d.latitude,d.longitude],13);pinMaps[mapId]._pinMarker.setLatLng([d.latitude,d.longitude]);}
+  }catch(e){status.textContent=e.message;}
+}
+</script>
+<script>
+const options={Plumbing:['Tap/Faucet repair','Pipe leakage','Drain blockage','Toilet repair','Water tank/pipe work','New installation','Other plumbing work'],Electrical:['Switch/socket repair','Fan repair','Light installation','Wiring issue','Power outage','Other electrical work'],Carpentry:['Furniture repair','Door repair','Shelf installation','Bed/table repair','Other carpentry work'],Cleaning:['Home cleaning','Bathroom cleaning','Kitchen cleaning','Deep cleaning','Office cleaning'], 'Appliance Repair':['AC repair','Washing machine','Refrigerator','Microwave','Other appliance'], 'Mobile Repair':['Screen replacement','Battery','Charging issue','Software issue','Other mobile repair'],'Laptop Repair':['Screen','Keyboard','Battery','Slow laptop','OS/software','Other laptop repair'],'Basic IT Support':['Wi-Fi/network','Printer','Software install','Computer setup','Other IT support']};
+function toggleScheduleField(){const mode=document.getElementById('bookingTiming')?.value;const box=document.getElementById('scheduleField');const input=document.getElementById('scheduledAt');if(!box||!input)return;box.style.display=mode==='SCHEDULED'?'block':'none';input.required=mode==='SCHEDULED';if(mode==='NOW')input.value='';}
+function setMode(mode){document.getElementById('quickPanel').style.display=mode==='quick'?'block':'none';document.getElementById('aiPanel').style.display=mode==='ai'?'block':'none';document.getElementById('quickTab').classList.toggle('active',mode==='quick');document.getElementById('aiTab').classList.toggle('active',mode==='ai')}
+function selectQuick(service,el){document.getElementById('quickServiceName').value=service;const sel=document.getElementById('quickOptionSelect');sel.innerHTML='<option value="">Select an option</option>'+(options[service]||['General service']).map(x=>`<option>${x}</option>`).join('');document.getElementById('quickDetails').style.display='block';document.querySelectorAll('.quick-option').forEach(x=>x.style.borderColor='var(--line)');el.style.borderColor='var(--blue)';document.getElementById('deliveryFields').style.display=service==='Delivery & Errands'?'grid':'none';el.scrollIntoView({behavior:'smooth',block:'nearest'})}
+const params=new URLSearchParams(location.search);if(params.get('mode')==='ai')setMode('ai');if(params.get('service')){const el=[...document.querySelectorAll('.quick-option')].find(x=>x.dataset.service===params.get('service'));if(el)selectQuick(params.get('service'),el)}
+document.getElementById('aiForm').addEventListener('submit',async e=>{e.preventDefault();const btn=document.getElementById('aiSubmit'),status=document.getElementById('aiStatus');btn.disabled=true;status.textContent='Connecting to Gemini…';try{const res=await fetch('{{ url_for('ai_analyze_and_create') }}',{method:'POST',body:new FormData(e.target)});const data=await res.json();if(!res.ok||!data.success)throw new Error(data.message||'AI request failed');status.textContent='Gemini analysis completed.';const a=data.analysis;document.getElementById('aiResult').style.display='block';document.getElementById('aiResult').innerHTML=`<h4 style="margin:0 0 8px">AI preliminary assessment</h4><div class="muted"><b>Problem:</b> ${a.problem}</div><div class="muted"><b>Possible cause:</b> ${a.possible_cause}</div><div class="muted"><b>Difficulty:</b> ${a.difficulty}</div><div class="muted"><b>Estimated range:</b> ${a.estimated_price}</div><div style="margin-top:12px"><a class="primary-btn" href="/searching/${data.request_id}">Find nearby providers →</a></div>`}catch(err){status.textContent='Gemini error: '+err.message;status.style.color='var(--red)'}finally{btn.disabled=false}});
+</script>
+{% endblock %}

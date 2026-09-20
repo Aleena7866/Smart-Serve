@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Provider Profile{% endblock %}
+{% block content %}
+<div class="page profile-page">
+  <div class="greeting"><div><div class="eyebrow">PROFESSIONAL PROFILE</div><h1>Your provider profile</h1><div class="muted">Build trust before the first job. Every field below is optional.</div></div><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">← Dashboard</a></div>
+  <form class="profile-editor form-card" method="post" enctype="multipart/form-data">
+    <div class="profile-hero-row">
+      <div class="profile-photo-wrap">
+        {% if provider['profile_photo_path'] %}<img class="profile-photo" src="{{ url_for('static', filename=provider['profile_photo_path']) }}" alt="Profile photo">{% else %}<div class="profile-photo placeholder">{{ provider['name'][:1]|upper }}</div>{% endif %}
+      </div>
+      <div><h2>{{ provider['name'] }}</h2><div class="muted">{{ provider['email'] }}</div><div class="profile-badges"><span>★ {{ '%.1f'|format(provider['rating'] or 0) }}</span><span>{{ provider['experience'] or 0 }} yrs</span><span>{{ provider['ekyc_status'] or 'NOT_SUBMITTED' }}</span></div></div>
+    </div>
+    <div class="profile-grid">
+      <label>Name<input class="input" name="name" value="{{ provider['name'] or '' }}"></label>
+      <label>Mobile number <span class="optional">optional</span><input class="input" name="phone" inputmode="tel" value="{{ provider['phone'] or '' }}" placeholder="+91 …"></label>
+      <label class="full">Services offered <span class="optional">optional · select all that apply</span>
+        <div class="profile-service-picker">
+          {% for service in services %}<label class="service-option"><input type="checkbox" name="service_ids" value="{{ service['id'] }}" {% if service['id'] in selected_service_ids %}checked{% endif %}><span><strong>{{ service['name'] }}</strong><small>{{ service['description'] or '' }}</small></span></label>{% endfor %}
+        </div>
+      </label>
+      <label>Experience in years <span class="optional">optional</span><input class="input" type="number" min="0" max="60" name="experience" value="{{ provider['experience'] or 0 }}"></label>
+      <label class="full">About you <span class="optional">optional</span><textarea class="input" name="bio" rows="4" placeholder="Tell customers about your experience, service area and strengths.">{{ provider['bio'] or '' }}</textarea></label>
+      <label>Profile picture <span class="optional">optional</span><input class="input" type="file" name="profile_photo" accept="image/*"><small class="muted">JPG, PNG or WebP · max 5 MB</small></label>
+      <label>eKYC document <span class="optional">optional</span><input class="input" type="file" name="ekyc_document" accept="image/*,.pdf"><small class="muted">Stored privately; not exposed as a public URL.</small></label>
+    </div>
+    <div class="profile-note"><strong>🔒 Privacy</strong><span>eKYC is optional for now. We store the document privately and do not show it to customers.</span></div>
+    <button class="primary-btn" type="submit">Save profile</button>
+  </form>
+</div>
+{% endblock %}

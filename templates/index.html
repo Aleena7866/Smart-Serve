@@ -1,0 +1,781 @@
+{% extends "base.html" %}
+
+{% block title %}
+Smart Serve | Solve. Serve. Earn.
+{% endblock %}
+
+
+{% block content %}
+
+<div class="home-page">
+
+
+    <!-- =====================================================
+         HERO
+         ===================================================== -->
+
+    <section class="home-hero">
+
+        <div class="home-badge">
+            <span>✦</span>
+            AI-POWERED LOCAL SERVICE PLATFORM
+        </div>
+
+
+        <h1>
+
+            Solve Problems.
+
+            <span>
+                Create Opportunities.
+            </span>
+
+        </h1>
+
+
+        <p class="home-subtitle">
+
+            Smart Serve connects people who need help
+            with skilled people who can provide it.
+
+            <br>
+
+            <strong>
+                Get problems solved. Use your skills.
+                Earn in your free time.
+            </strong>
+
+        </p>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         TWO MAIN OPTIONS
+         ===================================================== -->
+
+    <section class="choice-section">
+
+
+        <!-- USER -->
+
+        <div class="choice-card user-choice">
+
+            <div class="choice-top">
+
+                <div class="choice-icon">
+                    👤
+                </div>
+
+                <span class="choice-label">
+                    FOR USERS
+                </span>
+
+            </div>
+
+
+            <h2>
+                I NEED HELP
+            </h2>
+
+
+            <p>
+
+                Have a problem at home, with your
+                electronics, computer or other service?
+
+                Tell Smart Serve what happened and
+                we'll help you find the right solution.
+
+            </p>
+
+
+            <div class="choice-features">
+
+                <div>
+                    ✓ Describe your problem
+                </div>
+
+                <div>
+                    ✓ Get AI-assisted analysis
+                </div>
+
+                <div>
+                    ✓ See an estimated price
+                </div>
+
+                <div>
+                    ✓ Find suitable providers
+                </div>
+
+            </div>
+
+
+            <a href="{{ url_for('register') }}"
+               class="choice-button user-button">
+
+                Get Help
+
+                <span>→</span>
+
+            </a>
+
+        </div>
+
+
+
+        <!-- PROVIDER -->
+
+        <div class="choice-card provider-choice">
+
+            <div class="choice-top">
+
+                <div class="choice-icon">
+                    🧑‍🔧
+                </div>
+
+                <span class="choice-label">
+                    FOR SKILLED PEOPLE
+                </span>
+
+            </div>
+
+
+            <h2>
+                EARN WITH YOUR SKILLS
+            </h2>
+
+
+            <p>
+
+                Have a skill you can use to help others?
+
+                Turn your free time, weekends and
+                practical experience into service
+                opportunities.
+
+            </p>
+
+
+            <div class="choice-features">
+
+                <div>
+                    ✓ Choose your skills
+                </div>
+
+                <div>
+                    ✓ Find suitable service requests
+                </div>
+
+                <div>
+                    ✓ Work during your free time
+                </div>
+
+                <div>
+                    ✓ Build experience and ratings
+                </div>
+
+            </div>
+
+
+            <button type="button"
+                    class="choice-button provider-button"
+                    onclick="showProviderMode()">
+
+                Start Earning
+
+                <span>→</span>
+
+            </button>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         PROVIDER MODE PANEL
+         ===================================================== -->
+
+    <section id="providerModePanel"
+             class="provider-mode-panel">
+
+
+        <div class="provider-mode-header">
+
+            <div>
+
+                <div class="home-badge small">
+                    🎓 STUDENT / PART-TIME OPPORTUNITY
+                </div>
+
+                <h2>
+                    Turn Your Skills Into Opportunities
+                </h2>
+
+                <p>
+
+                    Enable Student Mode to explore how
+                    Smart Serve can help students and
+                    skilled people find suitable work
+                    during weekends and free time.
+
+                </p>
+
+            </div>
+
+
+            <button type="button"
+                    class="student-toggle"
+                    onclick="toggleStudentModeFromHome()">
+
+                <span>
+                    🎓
+                </span>
+
+                Enable Student Mode
+
+                <strong id="homeStudentState">
+                    OFF
+                </strong>
+
+            </button>
+
+        </div>
+
+
+
+        <div class="provider-benefits">
+
+
+            <div class="benefit-card">
+
+                <div class="benefit-icon">
+                    🗓️
+                </div>
+
+                <h3>
+                    Flexible Work
+                </h3>
+
+                <p>
+                    Choose opportunities that fit
+                    your available time.
+                </p>
+
+            </div>
+
+
+            <div class="benefit-card">
+
+                <div class="benefit-icon">
+                    🛠️
+                </div>
+
+                <h3>
+                    Use Your Skills
+                </h3>
+
+                <p>
+                    Offer services based on what
+                    you already know.
+                </p>
+
+            </div>
+
+
+            <div class="benefit-card">
+
+                <div class="benefit-icon">
+                    ⭐
+                </div>
+
+                <h3>
+                    Build Experience
+                </h3>
+
+                <p>
+                    Complete services and build
+                    your provider profile.
+                </p>
+
+            </div>
+
+
+            <div class="benefit-card">
+
+                <div class="benefit-icon">
+                    ₹
+                </div>
+
+                <h3>
+                    Earn
+                </h3>
+
+                <p>
+                    Turn suitable service opportunities
+                    into additional income.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="provider-cta">
+
+            <div>
+
+                <strong>
+                    Ready to use your skills?
+                </strong>
+
+                <span>
+                    Create your provider profile and
+                    start exploring opportunities.
+                </span>
+
+            </div>
+
+
+            <a href="{{ url_for('register') }}"
+               class="choice-button provider-button">
+
+                Become a Provider →
+
+            </a>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         USER WORKFLOW
+         ===================================================== -->
+
+    <section class="workflow-section">
+
+        <div class="section-heading">
+
+            <span>
+                FOR USERS
+            </span>
+
+            <h2>
+                Getting a problem solved is simple.
+            </h2>
+
+            <p>
+                Smart Serve guides you from the problem
+                to the right service provider.
+            </p>
+
+        </div>
+
+
+        <div class="workflow-grid">
+
+
+            <div class="workflow-card">
+
+                <div class="workflow-number">
+                    01
+                </div>
+
+                <div class="workflow-icon">
+                    🔧
+                </div>
+
+                <h3>
+                    Tell Us Your Problem
+                </h3>
+
+                <p>
+                    Select a service and explain
+                    what is happening.
+                </p>
+
+            </div>
+
+
+            <div class="workflow-line"></div>
+
+
+            <div class="workflow-card">
+
+                <div class="workflow-number">
+                    02
+                </div>
+
+                <div class="workflow-icon">
+                    🤖
+                </div>
+
+                <h3>
+                    Let AI Analyze
+                </h3>
+
+                <p>
+                    AI provides a preliminary problem
+                    analysis and price estimate.
+                </p>
+
+            </div>
+
+
+            <div class="workflow-line"></div>
+
+
+            <div class="workflow-card">
+
+                <div class="workflow-number">
+                    03
+                </div>
+
+                <div class="workflow-icon">
+                    🔍
+                </div>
+
+                <h3>
+                    Find a Provider
+                </h3>
+
+                <p>
+                    View providers suitable for
+                    your requested service.
+                </p>
+
+            </div>
+
+
+            <div class="workflow-line"></div>
+
+
+            <div class="workflow-card">
+
+                <div class="workflow-number">
+                    04
+                </div>
+
+                <div class="workflow-icon">
+                    ✓
+                </div>
+
+                <h3>
+                    Resolve the Issue
+                </h3>
+
+                <p>
+                    Select a provider and get
+                    your problem resolved.
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         SERVICES
+         ===================================================== -->
+
+    <section class="home-services">
+
+        <div class="section-heading">
+
+            <span>
+                SERVICES
+            </span>
+
+            <h2>
+                Help for everyday problems.
+            </h2>
+
+            <p>
+                Choose from common services available
+                through Smart Serve.
+            </p>
+
+        </div>
+
+
+        <div class="service-showcase">
+
+
+            <div class="showcase-service"
+                onclick="openService('Plumbing')">
+
+                🔧
+
+                <span>
+                    Plumbing
+                </span>
+
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Electrical')">
+
+                ⚡
+
+                <span>
+                    Electrical
+                </span>
+
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Carpentry')">
+
+                🪚
+
+                <span>
+                    Carpentry
+                </span>
+
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Appliance Repair')">
+
+                🔌
+
+                <span>
+                    Appliance Repair
+                </span>
+
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Cleaning')">
+
+                🧹
+                <span>Cleaning</span>
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Mobile Repair')">
+
+                📱
+                <span>Mobile Repair</span>
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Laptop Repair')">
+
+                💻
+                <span>Laptop Repair</span>
+            </div>
+
+
+            <div class="showcase-service"
+                onclick="openService('Basic IT Support')">
+
+                🖥️
+                <span>Basic IT Support</span>
+            </div>
+
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         FINAL CTA
+         ===================================================== -->
+
+    <section class="final-cta">
+
+        <div>
+
+            <span class="final-icon">
+                ✦
+            </span>
+
+            <h2>
+                One platform.
+                <span>Two opportunities.</span>
+            </h2>
+
+            <p>
+                Get the help you need or use what
+                you know to help someone else.
+            </p>
+
+        </div>
+
+
+        <div class="final-actions">
+
+            <a href="{{ url_for('register') }}"
+               class="choice-button user-button">
+
+                I Need Help →
+
+            </a>
+
+
+            <button type="button"
+                    class="choice-button provider-button"
+                    onclick="showProviderMode()">
+
+                Earn With Your Skills →
+
+            </button>
+
+        </div>
+
+    </section>
+
+
+</div>
+
+
+
+<script>
+
+function showProviderMode() {
+
+    var panel =
+        document.getElementById(
+            "providerModePanel"
+        );
+
+    if (!panel) {
+        return;
+    }
+
+    panel.classList.add(
+        "provider-panel-visible"
+    );
+
+    panel.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+}
+
+
+function toggleStudentModeFromHome() {
+
+    var enabled =
+        document.body.classList.toggle(
+            "student-mode"
+        );
+
+    localStorage.setItem(
+        "smartServeStudentMode",
+        enabled ? "on" : "off"
+    );
+
+    var state =
+        document.getElementById(
+            "homeStudentState"
+        );
+
+    if (state) {
+        state.textContent =
+            enabled ? "ON" : "OFF";
+    }
+
+    var globalState =
+        document.getElementById(
+            "studentModeState"
+        );
+
+    if (globalState) {
+        globalState.textContent =
+            enabled ? "ON" : "OFF";
+    }
+
+    var panel =
+        document.getElementById(
+            "providerModePanel"
+        );
+
+    if (enabled && panel) {
+        panel.classList.add(
+            "student-mode-active"
+        );
+    }
+    else if (panel) {
+        panel.classList.remove(
+            "student-mode-active"
+        );
+    }
+}
+
+
+/* =====================================================
+   SERVICE CLICK
+   ===================================================== */
+
+function openService(serviceName) {
+
+    var loginPage = "/login";
+
+    var supportPortal =
+        "/customer/dashboard";
+
+
+    /*
+     * Check whether the current page
+     * contains the Logout link.
+     */
+
+    var logoutLink =
+        document.querySelector(
+            'a[href*="/logout"]'
+        );
+
+
+    var isLoggedIn =
+        logoutLink !== null;
+
+
+    /*
+     * USER NOT LOGGED IN
+     */
+
+    if (!isLoggedIn) {
+
+        window.location.href =
+            loginPage;
+
+        return;
+    }
+
+
+    /*
+     * USER ALREADY LOGGED IN
+     */
+
+    localStorage.setItem(
+        "smartServeSelectedService",
+        serviceName
+    );
+
+
+    window.location.href =
+        supportPortal;
+
+}
+
+</script>
+
+{% endblock %}

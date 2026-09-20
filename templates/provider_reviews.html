@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ provider['name'] }} — Customer Reviews | SmartServe{% endblock %}
+{% block content %}
+<div class="page">
+  <a class="muted" href="{{ url_for('provider_profile', provider_id=provider['id']) }}">← Back to profile</a>
+  <div class="greeting" style="margin-top:10px"><div><div class="eyebrow">CUSTOMER FEEDBACK</div><h1>{{ provider['name'] }} — Reviews</h1><div class="muted">Verified feedback from customers who completed services with this professional.</div></div><div class="review-summary">★ {{ '%.1f'|format(provider['rating'] or 0) }}<span>{{ reviews|length }} reviews</span></div></div>
+  <div class="review-list">
+  {% for r in reviews %}
+    <article class="provider-review-card"><div class="review-top"><div><strong>{{ r['customer_name'] }}</strong><div class="muted">{{ r['service_name'] }} · {{ r['created_at'] }}</div></div><span class="rating">★ {{ r['rating'] }}/5</span></div><p>{{ r['review'] or 'Customer left a rating without written feedback.' }}</p></article>
+  {% else %}<div class="form-card"><h3>No reviews yet</h3><p class="muted">Reviews will appear here after verified completed services.</p></div>{% endfor %}
+  </div>
+</div>
+{% endblock %}

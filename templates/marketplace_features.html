@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Safety & Tools{% endblock %}
+{% block content %}
+<div class="page safety-page">
+  <div class="greeting hub-head">
+    <div><div class="eyebrow">SMARTSERVE V7</div><h1>Safety & Tools</h1><p class="muted">Your working control center for safety, trust, service tools and local-market features.</p></div>
+    <button class="outline-btn" onclick="refreshTools()">↻ Refresh</button>
+  </div>
+
+  <div class="hub-status" id="hubStatus"><span class="status-dot"></span><strong>Loading your tools…</strong><small>Checking your account and active services.</small></div>
+
+  <section class="tool-section">
+    <div class="section-title"><div><div class="eyebrow">SAFETY</div><h2>Protection & support</h2></div></div>
+    <div class="feature-grid">
+      <button class="feature-card action" onclick="openTrusted()"><b>🛡️ Trusted contact</b><span>Add, review or remove the person SmartServe should associate with your safety alerts.</span></button>
+      <button class="feature-card action" onclick="openSOS()"><b>🆘 SOS</b><span>Send a high-priority alert for an active service to SmartServe operations.</span></button>
+      <button class="feature-card action" onclick="openDispute()"><b>⚑ Dispute center</b><span>Report incomplete work, damage, overcharging or another service issue.</span></button>
+      <button class="feature-card action" onclick="openWarranty()"><b>🛡️ Service warranty</b><span>Check warranty status for a completed or active service.</span></button>
+    </div>
+  </section>
+
+  <section class="tool-section">
+    <div class="section-title"><div><div class="eyebrow">SERVICE TOOLS</div><h2>Manage your SmartServe experience</h2></div></div>
+    <div class="feature-grid">
+      {% if session.get('role')=='customer' %}
+      <a class="feature-card" href="{{ url_for('request_service') }}"><b>📅 Schedule service</b><span>Book for later instead of only requesting immediately.</span></a>
+      <button class="feature-card action" onclick="openRepeat()"><b>🔁 Repeat / AMC</b><span>Create a recurring maintenance plan from an eligible completed booking.</span></button>
+      <button class="feature-card action" onclick="openPreferences()"><b>🌐 Language</b><span>Set English, Hindi, Kannada, Tamil, Telugu or Marathi.</span></button>
+      <button class="feature-card action" onclick="toggleLowBandwidth()"><b>📶 Low bandwidth</b><span>Reduce heavy map/image loading for weak rural connections.</span></button>
+      {% else %}
+      <a class="feature-card" href="{{ url_for('provider_profile_edit') }}"><b>🪪 Profile & verification</b><span>Manage profile, phone, photo and optional eKYC.</span></a>
+      <a class="feature-card" href="{{ url_for('provider_portfolio') }}"><b>🖼️ Portfolio</b><span>Show previous work to customers.</span></a>
+      <a class="feature-card" href="{{ url_for('provider_reviews_center') }}"><b>⭐ Reviews</b><span>Read customer feedback and reputation history.</span></a>
+      <a class="feature-card" href="{{ url_for('provider_earnings') }}"><b>₹ Earnings</b><span>Track completed-service earnings and payout status.</span></a>
+      {% endif %}
+      <a class="feature-card" href="{{ url_for('customer_dashboard') if session.get('role')=='customer' else url_for('provider_dashboard') }}"><b>🧠 Provider trust & ranking</b><span>Compare trust, rating, experience, verification and distance before selection.</span></a>
+      <div class="feature-card"><b>🧭 Every-PIN service area</b><span>SmartServe works with valid Indian PIN codes, including villages and small towns. GPS improves distance and routing but isn't required for PIN matching.</span></div>
+    </div>
+  </section>
+
+  {% if session.get('role')=='admin' %}
+  <section class="tool-section"><div class="section-title"><div><div class="eyebrow">OPERATIONS</div><h2>Platform controls</h2></div></div><div class="feature-grid"><a class="feature-card admin" href="{{ url_for('admin_operations') }}"><b>🖥️ Admin operations</b><span>Live supply, active services, disputes, SOS alerts and fraud signals.</span></a><a class="feature-card admin" href="{{ url_for('fraud_scan') }}"><b>🧠 Fraud scan</b><span>Run the explainable baseline fraud checks.</span></a></div></section>
+  {% endif %}
+
+  <section class="form-card active-card"><div class="eyebrow">ACTIVE SERVICES</div><h2>Safety actions for your current jobs</h2><div id="activeServices" class="active-list"><div class="empty-state">Loading…</div></div></section>
+</div>
+
+<div class="modal" id="toolsModal"><div class="modal-card"><button class="modal-close" onclick="closeTools()">×</button><div id="modalContent"></div></div></div>
+
+<style>
+.safety-page{max-width:1080px}.hub-head{align-items:center}.hub-status{display:grid;grid-template-columns:auto 1fr;column-gap:10px;align-items:center;padding:16px 18px;margin:14px 0;border:1px solid var(--line);border-radius:18px;background:var(--card2)}.hub-status small{grid-column:2;color:var(--muted)}.status-dot{width:10px;height:10px;border-radius:50%;background:#20c997;box-shadow:0 0 14px #20c997}.tool-section{margin:18px 0}.section-title{margin-bottom:10px}.section-title h2{margin:2px 0}.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.feature-card{display:grid;gap:8px;text-decoration:none;color:inherit;padding:18px;border:1px solid var(--line);border-radius:20px;background:linear-gradient(145deg,var(--card),var(--card2));min-height:120px;transition:.18s;text-align:left}.feature-card:hover{transform:translateY(-2px);border-color:var(--blue)}.feature-card.action{font:inherit;cursor:pointer}.feature-card b{font-size:13px}.feature-card span{font-size:10px;color:var(--muted);line-height:1.6}.feature-card.admin{border-color:#ffae3266}.active-card{margin-top:18px}.active-list{display:grid;gap:9px;margin-top:12px}.active-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px;border:1px solid var(--line);border-radius:15px;background:var(--card2)}.active-row small{display:block;color:var(--muted);margin-top:3px}.active-actions{display:flex;gap:7px;flex-wrap:wrap}.modal{position:fixed;inset:0;background:#020814aa;backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:18px;z-index:10000}.modal.open{display:flex}.modal-card{width:min(560px,100%);max-height:90vh;overflow:auto;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;position:relative;box-shadow:0 25px 80px #0008}.modal-close{position:absolute;right:14px;top:12px;border:1px solid var(--line);background:var(--card2);color:inherit;border-radius:10px;width:34px;height:34px;cursor:pointer}.modal-card h2{margin-top:0}.tool-form{display:grid;gap:10px}.tool-form input,.tool-form select,.tool-form textarea{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--card2);color:inherit}.tool-note{padding:12px;border-radius:13px;background:var(--card2);color:var(--muted);font-size:11px}.contact-row{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);padding:11px;border-radius:13px;margin:7px 0}.contact-row button{border:0;background:transparent;color:#ff8585;cursor:pointer}@media(max-width:850px){.feature-grid{grid-template-columns:1fr 1fr}}@media(max-width:560px){.feature-grid{grid-template-columns:1fr}.active-row{display:grid}}
+</style>
+<script>
+let toolState={user:{},trusted_contacts:[],active_services:[]};
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));}
+function closeTools(){document.getElementById('toolsModal').classList.remove('open');}
+function showModal(html){document.getElementById('modalContent').innerHTML=html;document.getElementById('toolsModal').classList.add('open');}
+async function api(url,opts={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({success:false,message:'Invalid server response'}));if(!r.ok||d.success===false)throw Error(d.message||'Request failed');return d;}
+async function refreshTools(){try{const d=await api('/api/safety-tools');toolState=d;document.getElementById('hubStatus').innerHTML='<span class="status-dot"></span><strong>Tools ready</strong><small>Your safety settings and active services are connected.</small>';renderActive();}catch(e){document.getElementById('hubStatus').innerHTML='<span class="status-dot" style="background:#ff6b6b"></span><strong>Unable to load tools</strong><small>'+esc(e.message)+'</small>';}}
+function renderActive(){const box=document.getElementById('activeServices');if(!toolState.active_services.length){box.innerHTML='<div class="empty-state">No active services right now.</div>';return}box.innerHTML=toolState.active_services.map(x=>`<div class="active-row"><div><strong>#${x.id} · ${esc(x.service_name)}</strong><small>Status: ${esc(x.status)}${x.provider_name?' · Provider: '+esc(x.provider_name):x.customer_name?' · Customer: '+esc(x.customer_name):''}</small></div><div class="active-actions"><a class="outline-btn" href="/service/${x.id}/live">Live service</a><button class="danger-btn" onclick="openSOS(${x.id})">🆘 SOS</button><button class="outline-btn" onclick="openDispute(${x.id})">⚑ Issue</button></div></div>`).join('');}
+function openTrusted(){const contacts=toolState.trusted_contacts.map(c=>`<div class="contact-row"><span><b>${esc(c.name)}</b><br><small>${esc(c.phone)}${c.relationship?' · '+esc(c.relationship):''}</small></span><button onclick="removeContact(${c.id})">Remove</button></div>`).join('')||'<div class="tool-note">No trusted contact saved yet.</div>';showModal(`<h2>🛡️ Trusted contact</h2><p class="muted">This contact is associated with your SmartServe safety profile.</p>${contacts}<hr><form class="tool-form" onsubmit="saveContact(event)"><input id="tcName" placeholder="Contact name" required><input id="tcPhone" placeholder="Phone number" required><input id="tcRel" placeholder="Relationship (optional)"><button class="primary-btn">Save trusted contact</button></form>`);}
+async function saveContact(e){e.preventDefault();try{await api('/api/trusted-contact',{method:'POST',body:JSON.stringify({name:tcName.value,phone:tcPhone.value,relationship:tcRel.value})});closeTools();await refreshTools();alert('Trusted contact saved.');}catch(e){alert(e.message)}}
+async function removeContact(id){try{await api('/api/trusted-contact/'+id,{method:'DELETE'});await refreshTools();openTrusted();}catch(e){alert(e.message)}}
+function requestChoice(title,cb){if(!toolState.active_services.length){alert('There is no active service for this safety action.');return}const opts=toolState.active_services.map(x=>`<option value="${x.id}">#${x.id} · ${esc(x.service_name)} · ${esc(x.status)}</option>`).join('');showModal(`<h2>${title}</h2><div class="tool-form"><select id="toolRequest">${opts}</select></div>`);window._toolCb=cb;}
+function openSOS(id=null){if(id){showModal(`<h2>🆘 Emergency safety alert</h2><div class="tool-note"><strong>If you are in immediate danger, call 112 first.</strong><br>SmartServe SOS creates a high-priority operations alert linked to this service.</div><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><a class="danger-btn" href="tel:112">📞 Call 112</a><button class="danger-btn" onclick="sendSOS(${id})">🆘 Send SmartServe SOS</button></div>`);return}requestChoice('🆘 Emergency safety alert',rid=>openSOS(rid));}
+async function sendSOS(id){try{const d=await api('/api/sos/'+id,{method:'POST',body:'{}'});closeTools();alert(d.message||'SOS sent.');}catch(e){alert(e.message)}}
+function openDispute(id=null){if(id){showModal(`<h2>⚑ Report a service issue</h2><form class="tool-form" onsubmit="submitDispute(event,${id})"><select id="reason"><option>Incomplete work</option><option>Damage</option><option>Overcharging</option><option>Provider did not arrive</option><option>Payment issue</option><option>Other</option></select><textarea id="desc" maxlength="1000" placeholder="Describe what happened" required></textarea><button class="primary-btn">Open dispute</button></form>`);return}requestChoice('⚑ Select the service',rid=>openDispute(rid));}
+async function submitDispute(e,id){e.preventDefault();try{const d=await api('/api/disputes',{method:'POST',body:JSON.stringify({request_id:id,reason:reason.value,description:desc.value})});closeTools();alert(d.message||'Dispute opened.');}catch(e){alert(e.message)}}
+async function openWarranty(){if(!toolState.active_services.length){alert('No active service found.');return}const opts=toolState.active_services.map(x=>`<option value="${x.id}">#${x.id} · ${esc(x.service_name)} · ${esc(x.status)}</option>`).join('');showModal(`<h2>🛡️ Service warranty</h2><form class="tool-form" onsubmit="checkWarranty(event)"><select id="warrantyRid">${opts}</select><button class="primary-btn">Check warranty</button></form><div id="warrantyResult" style="margin-top:10px"></div>`)}
+async function checkWarranty(e){e.preventDefault();try{const d=await api('/api/service/'+Number(warrantyRid.value)+'/warranty');document.getElementById('warrantyResult').innerHTML=d.warranty?`<div class="tool-note"><strong>✓ ${d.warranty.warranty_days}-day warranty</strong><br>Valid until ${esc(d.warranty.warranty_until||'the warranty date')}<br><span>${esc(d.warranty.terms||'')}</span></div>`:'<div class="tool-note">No warranty record exists for this service yet. Warranty is created after successful payment.</div>';}catch(e){alert(e.message)}}
+function openPreferences(){showModal(`<h2>🌐 Language & accessibility</h2><form class="tool-form" onsubmit="savePrefs(event)"><select id="lang"><option value="en">English</option><option value="hi">Hindi</option><option value="kn">Kannada</option><option value="ta">Tamil</option><option value="te">Telugu</option><option value="mr">Marathi</option></select><button class="primary-btn">Save language</button></form>`);}
+async function savePrefs(e){e.preventDefault();try{await api('/api/preferences',{method:'POST',body:JSON.stringify({language:lang.value,low_bandwidth:!!toolState.user.low_bandwidth_mode})});closeTools();await refreshTools();alert('Language preference saved.');}catch(e){alert(e.message)}}
+async function toggleLowBandwidth(){const enabled=!Number(toolState.user.low_bandwidth_mode);try{await api('/api/preferences',{method:'POST',body:JSON.stringify({language:toolState.user.preferred_language||'en',low_bandwidth:enabled})});await refreshTools();alert(enabled?'Low-bandwidth mode enabled.':'Low-bandwidth mode disabled.');}catch(e){alert(e.message)}}
+function openRepeat(){showModal(`<h2>🔁 Repeat / AMC</h2><p class="muted">Enter a completed booking ID.</p><form class="tool-form" onsubmit="createRepeat(event)"><input id="repeatRid" type="number" placeholder="Booking ID" required><select id="repeatFreq"><option>WEEKLY</option><option selected>MONTHLY</option><option>QUARTERLY</option></select><textarea id="repeatNotes" placeholder="Notes (optional)"></textarea><button class="primary-btn">Create plan</button></form>`);}
+async function createRepeat(e){e.preventDefault();try{const d=await api('/bookings/repeat',{method:'POST',body:JSON.stringify({request_id:Number(repeatRid.value),frequency:repeatFreq.value,notes:repeatNotes.value})});closeTools();alert(d.message||'Repeat plan created.');}catch(e){alert(e.message)}}
+refreshTools();
+</script>
+{% endblock %}

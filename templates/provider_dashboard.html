@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Provider{% endblock %}
+{% block content %}
+<div class="page">
+  <section class="greeting" id="profile"><div><div class="eyebrow">PROFESSIONAL MODE</div><h1>Hi, {{ session.get('user_name','Provider').split(' ')[0] }} 👋</h1><div class="muted">Manage nearby jobs, communicate with customers and complete work securely.</div><small class="muted" data-location-note>{% if provider and provider['location_source'] == 'PINCODE' %}PIN location active · {{ provider['pincode'] }}{% else %}PIN location required for local testing{% endif %}</small></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><a class="outline-btn" href="{{ url_for('provider_profile_edit') }}">Edit profile</a><button id="presenceButton" class="primary-btn" {% if provider and provider['location_source'] == 'PINCODE' and provider['is_online'] %}onclick="togglePinPresence(this)"{% else %}onclick="showPinRequired()"{% endif %}>{% if provider and provider['location_source'] == 'PINCODE' and provider['is_online'] %}● Online · PIN active{% else %}📍 Set PIN to go online{% endif %}</button></div></section>
+  <section class="form-card smart-tools"><div class="eyebrow">PROVIDER BUSINESS HUB</div><div class="tool-grid"><a class="tool-card" href="{{ url_for('provider_profile_edit') }}">👤<strong>Profile & verification</strong><small>Build customer trust</small></a><a class="tool-card" href="{{ url_for('provider_portfolio') }}">🖼️<strong>Portfolio</strong><small>Show previous work</small></a><a class="tool-card" href="{{ url_for('provider_reviews_center') }}">⭐<strong>Reviews</strong><small>Customer feedback</small></a><a class="tool-card" href="{{ url_for('provider_earnings') }}">₹<strong>Earnings</strong><small>Net & payout history</small></a></div></section>
+
+  <div class="form-card" style="display:flex;align-items:center;gap:12px">{% if provider and provider['profile_photo_path'] %}<img class="avatar provider-avatar-img" src="{{ url_for('static', filename=provider['profile_photo_path']) }}" alt="Profile">{% else %}<div class="avatar" style="width:58px;height:58px">{{ session.get('user_name','P')[:1]|upper }}</div>{% endif %}<div><strong>{{ provider['skills'] if provider else 'Provider' }}</strong><div class="muted">{{ provider['experience'] if provider else 0 }}+ years · ★ {{ '%.1f'|format(provider['rating'] or 0) if provider else '0.0' }} · Live GPS enables local matching</div></div></div>
+  <div class="form-card" style="margin-top:12px"><strong>📍 Set service area by PIN code</strong><div class="muted" style="margin:5px 0 9px">For local testing, enter the same PIN as the customer. This creates an approximate map location; real GPS can be used later.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input class="input" id="providerPincode" inputmode="numeric" maxlength="6" placeholder="e.g. 585401" value="{{ provider['pincode'] if provider and provider['pincode'] else '' }}" style="margin:0;max-width:180px"><button class="outline-btn" id="setPinBtn" onclick="setProviderPincode(this)">Set PIN location</button></div><div class="muted" id="providerPinStatus" style="margin-top:8px">No PIN test location selected.</div></div>
+  <div class="section-head" id="requests"><div><h2>Customer Requests</h2><div class="muted">Customers choose you from the live PIN-area list. You decide whether to accept or decline after they select you.</div></div></div>
+  <div class="section-head"><div><h2>My Jobs</h2><div class="muted">Accepted and completed services.</div></div></div>
+  <div class="booking-grid">
+  {% for r in requests %}
+    <article class="booking-card" data-request-id="{{ r['id'] }}">
+      <div class="top"><div class="avatar">{{ r['service_name'][:1]|upper }}</div><div><h3>{{ r['service_name'] }}</h3><div class="muted">Customer: {{ r['customer_name'] }}</div></div><span class="status-pill {% if r['status'] in ['ASSIGNED','ARRIVED'] %}pending{% elif r['status']=='REJECTED' %}red{% elif r['status']=='COMPLETED' %}blue{% endif %}">{{ r['status'].replace('_',' ') }}</span></div>
+      <p>{{ r['description'] }}</p>
+      {% if r['estimated_price'] %}<div class="muted">Customer estimate: {{ r['estimated_price'] }}</div>{% endif %}
+      {% if r['status']=='ASSIGNED' %}<div class="match-note"><strong>📨 Customer selected you</strong><div class="muted" style="margin-top:4px">Review the service details and decide whether you can take this job.</div></div><div class="action-row"><form method="post" action="{{ url_for('provider_response',request_id=r['id'],action='accept') }}"><button class="primary-btn" type="submit">✓ Accept service</button></form><form method="post" action="{{ url_for('provider_response',request_id=r['id'],action='reject') }}"><button class="outline-btn" type="submit" onclick="return confirm('Decline this request? The customer can choose another provider.')">Decline</button></form></div>{% endif %}
+      {% if r['status'] in ['ACCEPTED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
+        <div class="map-card" style="margin-top:12px"><div class="tracking-head"><div><strong>📍 Live customer tracking</strong><small data-live-location-status>Waiting for live GPS…</small><small data-eta>Waiting for both live locations…</small></div><small>Both devices share real browser GPS</small></div><button class="outline-btn" style="font-size:9px;padding:7px 9px" onclick="requestLocationNow(this)">Refresh live GPS</button><div class="smart-map" id="provider-map-{{ r['id'] }}" data-request-id="{{ r['id'] }}"></div></div>
+      {% endif %}
+      {% if r['status']=='ACCEPTED' %}
+  <div class="arrival-flow">
+    <strong>📍 Reached the customer's location?</strong>
+    <p class="muted">Mark arrival first. The customer will then receive a private 6-digit confirmation code.</p>
+    <form method="post" action="{{ url_for('update_service_status',request_id=r['id'],new_status='ARRIVED') }}"><button class="primary-btn">📍 I've arrived</button></form>
+  </div>
+{% endif %}
+{% if r['status']=='ARRIVED' %}
+  <div class="arrival-flow">
+    <strong>🔐 Customer confirmation required</strong>
+    <p class="muted">Ask the customer for the 6-digit code shown in their SmartServe app. Never guess the code.</p>
+    <form method="post" action="{{ url_for('confirm_arrival',request_id=r['id']) }}" class="inline-confirm-form">
+      <input class="input" name="confirmation_code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="6-digit code" required>
+      <button class="primary-btn" type="submit">Verify & start service</button>
+    </form>
+  </div>
+{% endif %}
+      {% if r['status']=='IN_PROGRESS' %}
+        <div class="verify-box"><h4>Finish service with proof</h4><p class="muted">Upload up to 3 photos showing the completed work. Customer must verify before payment.</p><form method="post" action="{{ url_for('submit_completion_proof',request_id=r['id']) }}" enctype="multipart/form-data"><label class="file-input">Completion photos<input type="file" name="proof_images" accept="image/*" multiple required></label><button class="primary-btn" type="submit">Submit completion proof</button></form></div>
+      {% endif %}
+      {% if r['status']=='AWAITING_VERIFICATION' %}<div class="verify-box"><h4>Waiting for customer verification</h4><p class="muted">The customer must approve the uploaded proof before payment.</p></div>{% endif %}
+      {% if r['status']=='AWAITING_PAYMENT' %}
+        <div class="pay-box"><h4>Customer payment pending</h4><div class="muted">Agreed amount: {% if r['agreed_amount'] %}₹{{ '%.2f'|format(r['agreed_amount']|float) }}{% else %}Not set{% endif %}</div></div>
+      {% endif %}
+      {% if r['status'] in ['ACCEPTED','IN_PROGRESS'] %}<form method="post" action="{{ url_for('set_service_price',request_id=r['id']) }}" class="pay-box"><h4>Agreed service price</h4><div style="display:flex;gap:8px"><input class="input" style="margin:0" type="number" min="1" step="0.01" name="amount" value="{{ r['agreed_amount'] or '' }}" placeholder="₹ amount" required><button class="primary-btn">Save</button></div></form>{% endif %}
+      {% if r['status'] in ['ACCEPTED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}<div class="action-row" id="messages"><button class="primary-btn chat-button" onclick="openChat({{ r['id'] }})">💬 Chat customer</button><button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate</button><button class="outline-btn" type="button" onclick="callSmartServe({{ (r['customer_phone'] or '')|tojson }},{{ (r['customer_name'] or 'Customer')|tojson }})">📞 Call</button></div>{% endif %}
+    </article>
+  {% else %}<div class="form-card"><h3>No assigned jobs yet</h3><p class="muted">Keep your profile online and share your location to become discoverable to nearby customers.</p></div>{% endfor %}
+  </div>
+  <section class="provider-reviews-section">
+    <div class="section-head"><div><h2>Customer Reviews</h2><div class="muted">Feedback from customers who completed services with you.</div></div><div class="review-summary">★ {{ '%.1f'|format(provider['rating'] or 0) }} <span>{{ provider_reviews|length }} shown</span></div></div>
+    <div class="review-list">
+      {% for rv in provider_reviews %}
+      <article class="provider-review-card"><div class="review-top"><strong>{{ rv['customer_name'] }}</strong><span class="rating">★ {{ rv['rating'] }}</span></div><div class="muted">{{ rv['service_name'] }} · {{ rv['created_at'] }}</div><p>{{ rv['review'] or 'Customer left a rating without written feedback.' }}</p></article>
+      {% else %}<div class="form-card"><strong>No customer reviews yet.</strong><p class="muted">Verified reviews will appear here after customers complete and pay for services.</p></div>{% endfor %}
+    </div>
+  </section>
+</div>
+<style>.smart-tools{margin:12px 0}.tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:10px}.tool-card{border:1px solid var(--line);border-radius:16px;background:var(--card2);color:inherit;text-decoration:none;padding:12px;display:grid;gap:4px}.tool-card strong{font-size:11px}.tool-card small{font-size:8px;color:var(--muted)}@media(max-width:700px){.tool-grid{grid-template-columns:1fr 1fr}}</style>
+<script>
+
+async function setProviderPincode(button){
+  const pin=document.getElementById('providerPincode').value.replace(/\D/g,'');
+  const status=document.getElementById('providerPinStatus');
+  if(pin.length!==6){status.textContent='Enter exactly 6 digits.';return;}
+  button.disabled=true;status.textContent='Resolving PIN on map…';
+  try{
+    const r=await fetch('/api/location/pincode',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pincode:pin})});
+    const d=await r.json();if(!r.ok||!d.success)throw new Error(d.message||'PIN lookup failed');
+    status.textContent=`📍 ${d.label} · ${d.latitude.toFixed(4)}, ${d.longitude.toFixed(4)} · Test PIN location ready`;
+    window.smartservePinActive=true;
+    document.querySelectorAll('[data-location-note]').forEach(x=>x.textContent='PIN location active · '+d.label);
+    const online=await fetch('/api/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({online:true})});
+    if(!online.ok)throw new Error('PIN saved, but SmartServe could not set you online.');
+    button.textContent='✓ PIN set · Online';
+    const presence=document.getElementById('presenceButton');
+    presence.textContent='● Online · PIN active';
+    presence.onclick=function(){togglePinPresence(this)};
+  }catch(e){status.textContent=e.message;}finally{button.disabled=false;}
+}
+
+async function togglePinPresence(button){
+  button.disabled=true;
+  try{
+    const r=await fetch('/api/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({online:false})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||!d.success)throw new Error(d.message||'Unable to change online status');
+    button.textContent='📍 Go online with PIN';
+    button.onclick=()=>showPinRequired();
+    document.querySelectorAll('[data-location-note]').forEach(x=>x.textContent='Offline · PIN location saved');
+  }catch(e){alert(e.message);}
+  finally{button.disabled=false;}
+}
+function showPinRequired(){
+  const el=document.getElementById('providerPincode');
+  if(el){el.focus();el.scrollIntoView({behavior:'smooth',block:'center'});}
+  alert('Set your 6-digit PIN location first. Browser GPS is not required for this local test mode.');
+}
+
+async function respondOffer(requestId,providerId,action,button){
+  button.disabled=true;
+  try{
+    const r=await fetch(`/api/matching/offer/${requestId}/${providerId}/${action}`,{method:'POST'});
+    const d=await r.json();
+    if(!d.success)throw new Error(d.message||'Offer is no longer available');
+    if(action==='accept')location.reload();else button.closest('.offer-card').remove();
+  }catch(e){alert(e.message);button.disabled=false;}
+}
+</script>
+{% endblock %}

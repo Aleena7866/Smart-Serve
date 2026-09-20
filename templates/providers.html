@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Choose your professional{% endblock %}
+{% block content %}
+<div class="page providers-page">
+  <div class="greeting"><div><div class="eyebrow">CUSTOMER CHOICE</div><h1>Choose your {{ service_request['service_name'] }} professional</h1><div class="muted">Compare trust score, profile, experience, availability and distance. The provider is notified only after you select them.</div></div><a class="outline-btn" href="{{ url_for('searching',request_id=service_request['id']) }}">← Back</a></div>
+  <div class="form-card" style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap"><div><strong>{{ providers|length }} available now</strong><div class="muted">PIN {{ service_request['customer_pincode'] or 'location' }} · Radius {{ radius_km|round(0)|int }} km</div></div><div class="chips">{% for r in [5,10,25,50,100] %}<a class="chip" href="{{ url_for('find_providers',request_id=service_request['id'],radius=r) }}">{{ r }} km</a>{% endfor %}</div></div>
+  <div class="provider-choice-grid">
+  {% for p in providers %}
+    <article class="provider-choice">
+      <div class="provider-head">
+        {% if p['profile_photo_path'] %}<img class="provider-photo" src="{{ url_for('static',filename=p['profile_photo_path']) }}" alt="{{ p['name'] }}">{% else %}<div class="provider-photo placeholder">{{ p['name'][:1]|upper }}</div>{% endif %}
+        <div class="provider-main"><h3>{{ p['name'] }}</h3><div class="provider-meta"><span class="availability-dot">● Available now</span><span>★ {{ '%.1f'|format(p['rating']) }} ({{ p['review_count'] }})</span></div><div class="provider-meta">{% if p['distance_km'] is not none %}📍 {{ p['distance_km'] }} km{% else %}📍 Same PIN region{% endif %} · {% if p['eta_minutes'] %}~{{ p['eta_minutes'] }} min{% endif %}</div></div>
+        <div class="trust-badge"><strong>{{ p['trust_score']|round(0)|int }}</strong><span>Trust score</span></div>
+      </div>
+      <div class="chips">{% for skill in p['skills'].replace(';',',').replace('|',',').split(',')[:4] %}<span class="chip">{{ skill.strip() }}</span>{% endfor %}</div>
+      <div class="provider-info-grid"><div class="provider-info"><strong>{{ p['experience'] }}+ yrs</strong><span>Experience</span></div><div class="provider-info"><strong>{{ p['completed_jobs'] }}</strong><span>Completed</span></div><div class="provider-info"><strong>{{ p['masked_phone'] or 'Not added' }}</strong><span>Mobile</span></div></div>
+      <div class="provider-bio">{{ p['bio'] or 'No bio added yet. Review the full profile before selecting.' }}</div>
+      <div class="provider-actions"><a class="outline-btn" href="{{ url_for('provider_profile',provider_id=p['provider_id']) }}" target="_blank">View profile</a><button class="primary-btn" onclick="selectProvider({{ p['provider_id'] }},{{ p['name']|tojson }})">Select provider</button></div>
+    </article>
+  {% else %}<div class="form-card"><h3>No eligible professionals right now</h3><p class="muted">Try a larger radius or ask a provider in this PIN area to go online.</p></div>{% endfor %}
+  </div>
+</div>
+<script>
+async function selectProvider(id,name){if(!confirm(`Select ${name} for this service?`))return;try{const r=await fetch(`/api/providers/select/{{ service_request['id'] }}/${id}`,{method:'POST'});const d=await r.json();if(!r.ok||!d.success)throw Error(d.message||'Provider is no longer available.');alert(d.message);location.href='{{ url_for('customer_dashboard') }}#bookings';}catch(e){alert(e.message);location.reload();}}
+</script>
+{% endblock %}

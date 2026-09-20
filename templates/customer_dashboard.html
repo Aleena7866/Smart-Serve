@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Home{% endblock %}
+{% block content %}
+<div class="page">
+  <section class="greeting">
+    <div><div class="eyebrow">SMART SERVICE MARKETPLACE</div><h1>Hello, {{ session.get('user_name','there').split(' ')[0] }} 👋</h1><div class="muted">What service do you need today?</div></div>
+    <a class="primary-btn" href="{{ url_for('request_service') }}?mode=quick">+ Book a service</a>
+  </section>
+
+  <section class="form-card smart-tools"><div><div class="eyebrow">SMARTSERVE SAFETY & TOOLS</div><h2>Everything for a safer local service</h2><div class="muted">Live tracking, arrival PIN, provider trust, warranty, repeat services and support.</div></div><div class="tool-grid"><a class="tool-card" href="#bookings">🗺️<strong>Live service</strong><small>Track your active job</small></a><button class="tool-card" onclick="savePreferences()">🌐<strong>Language</strong><small>Local-language mode</small></button><button class="tool-card" onclick="addTrustedContact()">🛡️<strong>Trusted contact</strong><small>Safety contact</small></button><button class="tool-card" onclick="toggleLowBandwidth()">📶<strong>Low bandwidth</strong><small>Save data</small></button></div></section>
+
+  <div class="searchbar"><span>⌕</span><input id="serviceSearch" placeholder="Search for services..." oninput="filterServices(this.value)"><span>⌁</span></div>
+  <div class="location-line" style="display:flex;align-items:center;gap:7px;margin:9px 3px;color:var(--muted);font-size:10px"><span style="color:var(--blue)">●</span> Your live location powers nearby-provider matching <button class="outline-btn" style="padding:6px 9px;margin-left:auto;font-size:9px" onclick="requestLocationNow(this)">Use my location</button></div>
+
+  <section class="hero-card">
+    <div><div style="font-size:10px;font-weight:800;letter-spacing:1px;opacity:.85">AI POWERED · TRUSTED · NEAR YOU</div><h2>Get the right professional in a few taps.</h2><p>Use Quick Booking for instant service requests, or describe a complex problem and let Gemini provide a preliminary diagnosis.</p><a class="outline-btn" style="background:#fff;color:#1269f5;border:0" href="{{ url_for('request_service') }}">Try AI analysis →</a></div>
+    <div class="hero-robot">🤖</div>
+  </section>
+
+  <div class="section-head" id="services"><h2>Popular Services</h2><a href="{{ url_for('request_service') }}?mode=quick">View All</a></div>
+  <div class="service-grid" id="serviceGrid">
+    {% set icons={'Plumbing':'🔧','Electrical':'⚡','Carpentry':'🔨','Cleaning':'🧹','Appliance Repair':'🔌','Mobile Repair':'📱','Laptop Repair':'💻','Basic IT Support':'🖥️'} %}
+    {% for service in ['Plumbing','Electrical','Carpentry','Cleaning','Appliance Repair','Mobile Repair','Laptop Repair','Basic IT Support'] %}
+      <a class="service-tile service-filter" data-name="{{ service|lower }}" href="{{ url_for('request_service') }}?mode=quick&service={{ service|urlencode }}"><div class="service-icon">{{ icons.get(service,'🛠️') }}</div><strong>{{ service }}</strong></a>
+    {% endfor %}
+  </div>
+
+  <div class="section-head"><h2>Top Rated Providers</h2><a href="{{ url_for('request_service') }}?mode=quick">View All</a></div>
+  <div class="provider-strip">
+    {% for p in top_providers %}
+    <a class="provider-mini" href="{{ url_for('provider_profile', provider_id=p['provider_id']) }}"><div class="avatar">{{ p['name'][:1]|upper }}</div><div><strong>{{ p['name'] }}</strong><div class="rating">★ {{ '%.1f'|format(p['rating'] or 0) }}</div><div class="online">● {{ 'Available' if p['is_online'] else 'Usually available' }}</div></div></a>
+    {% endfor %}
+  </div>
+
+  <section id="bookings">
+    <div class="section-head"><div><h2>My Bookings</h2><div class="muted">Live request status updates automatically.</div></div></div>
+    <div class="booking-tabs"><button class="active" onclick="filterBookings('all',this)">Upcoming</button><button onclick="filterBookings('COMPLETED',this)">Completed</button><button onclick="filterBookings('REJECTED',this)">Cancelled</button></div>
+    <div class="booking-grid" id="bookingGrid">
+      {% for r in requests %}
+      <article class="booking-card booking-item" data-status="{{ r['status'] }}" data-request-id="{{ r['id'] }}">
+        <div class="top"><div class="avatar">{{ r['service_name'][:1]|upper }}</div><div><h3>{{ r['service_name'] }}</h3><div class="muted">{{ r['provider_name'] or 'Choose a professional' }}</div></div><span class="status-pill {% if r['status']=='PENDING' %}pending{% elif r['status']=='REJECTED' %}red{% elif r['status'] in ['COMPLETED'] %}blue{% else %}green{% endif %} request-status">{{ r['status'].replace('_',' ') }}</span></div>
+        <p>{{ r['description'] }}</p>
+        {% if r['provider_id'] %}<div class="muted">{% if r['provider_rating'] %}★ {{ '%.1f'|format(r['provider_rating']) }} · {% endif %}{{ 'Online' if r['provider_online'] else 'Selected professional' }}</div>{% endif %}
+        {% if r['status'] in ['PENDING','SEARCHING','OFFERED'] %}<div class="action-row"><a class="primary-btn" href="{{ url_for('searching',request_id=r['id']) }}">{% if r['status']=='PENDING' %}Choose a provider{% else %}Compare providers{% endif %} →</a></div>{% endif %}
+        {% if r['provider_id'] and r['status'] in ['ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
+          <div class="map-card" style="margin-top:12px"><div class="tracking-head"><div><strong>📍 Live tracking</strong><small data-live-location-status>Waiting for live GPS…</small><small data-eta>Waiting for both live locations…</small></div><small>Only real browser GPS · route ETA when both devices are live</small></div><button class="outline-btn" style="font-size:9px;padding:7px 9px" onclick="requestLocationNow(this)">Refresh my live GPS</button><div class="smart-map" id="customer-map-{{ r['id'] }}" data-request-id="{{ r['id'] }}"></div></div>
+        {% endif %}
+        {% if r['status']=='ASSIGNED' and r['provider_id'] %}<div class="match-note">📨 <strong>{{ r['provider_name'] or 'Selected professional' }}</strong> has your request. <span class="muted">Waiting for the provider to accept or decline.</span></div>{% endif %}
+        {% if r['provider_id'] and r['status'] in ['ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
+          <div class="action-row customer-contact-actions"><button class="primary-btn" onclick="openChat({{ r['id'] }})">💬 Chat provider</button><button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate price</button><a class="outline-btn" href="{{ url_for('live_service',request_id=r['id']) }}">🗺️ Live service</a><button class="outline-btn" type="button" onclick="callSmartServe({{ (r['provider_phone'] or '')|tojson }},{{ (r['provider_name'] or 'Provider')|tojson }})">📞 Call provider</button></div>
+        {% endif %}
+        {% if r['status'] in ['SEARCHING','OFFERED'] %}<div class="match-note">🟢 {{ 'Providers are available for you to compare. Choose the professional you trust based on trust score, profile, experience and distance.' }}</div>{% endif %}
+        {% if r['status']=='ARRIVED' %}
+          <div class="arrival-code-card">
+            <div><span class="eyebrow">PROVIDER ARRIVED</span><h4>Give this confirmation code to your provider</h4><p class="muted">Only share it after you confirm the professional has reached your home or office.</p></div>
+            <div class="confirmation-code">{{ r['confirmation_code'] or '------' }}</div>
+            <small class="muted">The provider must enter this code before the service can start.</small>
+          </div>
+        {% endif %}
+        {% if r['status']=='AWAITING_VERIFICATION' %}
+          <div class="verify-box"><h4>Provider completion proof</h4><p class="muted">Review the photos uploaded by your provider before verifying the completed work.</p><div class="proof-grid">{% for proof in (r['completion_proof_paths']|from_json) %}<a href="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" target="_blank" rel="noopener"><img src="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" alt="Provider completion proof"></a>{% endfor %}</div><form method="post" action="{{ url_for('verify_service',request_id=r['id']) }}" enctype="multipart/form-data"><label class="file-input">Upload your verification photo<input type="file" name="verification_image" accept="image/*" required></label><button class="primary-btn" type="submit">Verify & continue to payment →</button></form></div>
+        {% endif %}
+        {% if r['status']=='AWAITING_PAYMENT' and r['agreed_amount'] %}<div class="pay-box"><h4>Ready for payment</h4><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><strong>₹{{ '%.2f'|format(r['agreed_amount']|float) }}</strong><button class="primary-btn" onclick="paySmartServe({{ r['id'] }},this)">Pay securely</button></div></div>{% endif %}
+        {% if r['payment_status']=='PAID' %}<div class="muted" style="margin-top:10px;color:var(--green);font-weight:800">✓ Payment verified securely</div>{% endif %}
+        {% if r['status']=='COMPLETED' %}<div class="action-row"><a class="outline-btn" href="{{ url_for('review_service',request_id=r['id']) }}">★ Review provider</a></div>{% endif %}
+      </article>
+      {% else %}
+      <div class="form-card"><h3>No bookings yet</h3><p class="muted">Choose a service above and book your first professional.</p></div>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+<script>
+function filterServices(q){q=q.toLowerCase();document.querySelectorAll('.service-filter').forEach(x=>x.style.display=x.dataset.name.includes(q)?'block':'none')}
+function filterBookings(status,btn){document.querySelectorAll('.booking-tabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.booking-item').forEach(x=>{const s=x.dataset.status;x.style.display=(status==='all'?(s!=='COMPLETED'&&s!=='REJECTED'):s===status)?'block':'none'})}
+async function savePreferences(){const language=prompt('Language code: en, hi, kn, ta, te, mr','en')||'en';const d=await fetch('/api/preferences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language,low_bandwidth:document.body.classList.contains('low-bandwidth')})}).then(r=>r.json());alert(d.success?'Language preference saved.':'Unable to save preference.');}
+async function addTrustedContact(){const name=prompt('Trusted contact name');if(!name)return;const phone=prompt('Trusted contact phone');if(!phone)return;const relationship=prompt('Relationship (optional)')||'';const d=await fetch('/api/trusted-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone,relationship})}).then(r=>r.json());alert(d.message||'Trusted contact saved.');}
+async function toggleLowBandwidth(){const enabled=!document.body.classList.contains('low-bandwidth');const d=await fetch('/api/preferences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'en',low_bandwidth:enabled})}).then(r=>r.json());if(d.success){document.body.classList.toggle('low-bandwidth',enabled);alert(enabled?'Low-bandwidth mode enabled.':'Low-bandwidth mode disabled.');}else alert('Unable to save preference.');}
+</script>
+<style>.smart-tools{margin:14px 0;display:grid;gap:14px}.tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.tool-card{border:1px solid var(--line);border-radius:16px;background:var(--card2);color:inherit;text-decoration:none;padding:13px;display:grid;gap:4px;text-align:left;font:inherit;cursor:pointer}.tool-card strong{font-size:11px}.tool-card small{color:var(--muted);font-size:8px}@media(max-width:700px){.tool-grid{grid-template-columns:1fr 1fr}}</style>
+{% endblock %}

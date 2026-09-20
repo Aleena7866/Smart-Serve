@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}SmartServe | Choose your professional{% endblock %}
+{% block content %}
+<div class="page choosing-page">
+  <div class="greeting">
+    <div>
+      <div class="eyebrow">CUSTOMER CHOICE</div>
+      <h1 id="searchTitle">Choose your professional</h1>
+      <div class="muted" id="searchSubtitle">SmartServe found the available professionals for your PIN-code service area. You decide who gets the job.</div>
+    </div>
+    <button class="outline-btn" onclick="cancelSearch()">Cancel</button>
+  </div>
+
+  <section class="choice-hero form-card">
+    <div class="choice-orb">✓</div>
+    <div>
+      <strong id="searchState">Finding available professionals…</strong>
+      <div class="muted" id="searchDetail">Only online, approved professionals who match {{ service_request['service_name'] }} are shown.</div>
+    </div>
+    <div class="choice-count"><strong id="providerCount">0</strong><span>available now</span></div>
+  </section>
+
+  <div class="choice-explainer">
+    <div><span class="step active">1</span><div><strong>Compare</strong><small>Trust, profile, experience, distance and availability</small></div></div>
+    <div><span class="step">2</span><div><strong>Select</strong><small>Choose the professional you trust</small></div></div>
+    <div><span class="step">3</span><div><strong>Connect</strong><small>Chat, call and negotiate after selection</small></div></div>
+  </div>
+
+  <div class="range-panel form-card">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+      <div><strong>📍 Search radius</strong><div class="muted">Expand the area if you want more choices.</div></div>
+      <strong><span id="radiusValue">{{ service_request['service_radius_km'] or 10 }}</span> km</strong>
+    </div>
+    <input id="radiusSlider" type="range" min="1" max="100" step="1" value="{{ service_request['service_radius_km'] or 10 }}" style="width:100%;margin-top:12px">
+  </div>
+
+  <div class="quote-strip">
+    <div><span class="muted">Upfront estimate</span><strong id="quoteValue">Calculating…</strong></div>
+    <div><span class="muted">Service</span><strong>{{ service_request['service_name'] }}</strong></div>
+    <div><span class="muted">Your PIN</span><strong>{{ service_request['customer_pincode'] or '—' }}</strong></div>
+  </div>
+
+  <section class="map-card live-discovery-card">
+    <div class="tracking-head">
+      <div><strong>🗺️ Professionals in your area</strong><small id="mapStatus">Live availability · same-PIN providers are treated as the same service area in local test mode</small></div>
+      <span class="chip">{{ service_request['customer_pincode'] or 'Location' }}</span>
+    </div>
+    <div id="discoveryMap" class="discovery-map"></div>
+  </section>
+
+  <section>
+    <div class="section-head"><div><h2>Available professionals</h2><div class="muted">You choose the provider. SmartServe does not send the job to them until you select one.</div></div><button class="outline-btn" onclick="refreshAll()">↻ Refresh</button></div>
+    <div id="providerList" class="provider-choice-grid"></div>
+  </section>
+</div>
+
+<style>
+.choice-hero{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center}.choice-orb{width:58px;height:58px;border-radius:20px;display:grid;place-items:center;background:linear-gradient(135deg,#14b87a,#1676ff);color:#fff;font-size:27px}.choice-count{display:grid;text-align:center;min-width:90px}.choice-count strong{font-size:25px}.choice-count span{font-size:9px;color:var(--muted)}
+.choice-explainer{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:12px 0}.choice-explainer>div{display:flex;gap:9px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:15px;background:var(--card)}.choice-explainer small{display:block;color:var(--muted);font-size:8px;margin-top:2px}.step{width:27px;height:27px;border-radius:10px;display:grid;place-items:center;background:var(--card2);color:var(--muted);font-weight:800;font-size:11px}.step.active{background:var(--blue);color:#fff}
+.provider-choice-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.provider-choice{border:1px solid var(--line);background:var(--card);border-radius:20px;padding:15px;display:grid;gap:12px;transition:.18s ease;box-shadow:0 8px 25px rgba(0,0,0,.08)}.provider-choice:hover{transform:translateY(-2px);box-shadow:0 16px 35px rgba(0,0,0,.13)}.provider-head{display:flex;gap:11px;align-items:center}.provider-photo{width:58px;height:58px;border-radius:18px;object-fit:cover;flex:none}.provider-photo.placeholder{display:grid;place-items:center;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;font-weight:800;font-size:21px}.provider-main{min-width:0}.provider-main h3{margin:0 0 3px;font-size:14px}.provider-meta{display:flex;gap:6px;flex-wrap:wrap;color:var(--muted);font-size:9px}.trust-badge{margin-left:auto;display:grid;text-align:right}.trust-badge strong{font-size:17px}.trust-badge span{font-size:8px;color:var(--muted)}.provider-info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.provider-info{padding:9px;border:1px solid var(--line);border-radius:13px;background:var(--card2)}.provider-info strong{display:block;font-size:11px}.provider-info span{font-size:8px;color:var(--muted)}.provider-bio{font-size:9px;line-height:1.55;color:var(--muted);min-height:28px}.provider-actions{display:flex;gap:7px}.provider-actions>*{flex:1;text-align:center}.availability-dot{font-size:8px;color:var(--green);font-weight:800}.phone-mask{font-size:9px;color:var(--muted)}.selected-overlay{position:fixed;inset:0;background:rgba(3,9,20,.5);backdrop-filter:blur(4px);display:none;place-items:center;z-index:140}.selected-overlay.open{display:grid}.selected-modal{width:min(420px,calc(100vw - 30px));background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;text-align:center;box-shadow:0 30px 80px #0007}.selected-modal .big{font-size:45px;margin-bottom:8px}
+@media(max-width:800px){.provider-choice-grid{grid-template-columns:1fr}}@media(max-width:650px){.choice-hero{grid-template-columns:auto 1fr}.choice-count{grid-column:1/-1;display:flex;justify-content:center;gap:7px;align-items:baseline}.choice-explainer{grid-template-columns:1fr}.quote-strip{display:grid;grid-template-columns:1fr 1fr}.discovery-map{height:300px}.provider-info-grid{grid-template-columns:1fr 1fr}}
+</style>
+
+<div id="selectingOverlay" class="selected-overlay"><div class="selected-modal"><div class="big">✓</div><h2 id="selectedTitle">Confirming your choice…</h2><p class="muted" id="selectedText">SmartServe is connecting you with the professional you selected.</p></div></div>
+
+<script>
+const REQUEST_ID={{ service_request['id'] }};
+let discoveryMap,customerMarker,providerMarkers={};
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));}
+function initDiscoveryMap(){if(!window.L)return setTimeout(initDiscoveryMap,300);discoveryMap=L.map('discoveryMap').setView([20,78],5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(discoveryMap);}
+async function startMatching(){const radius=Number(document.getElementById('radiusSlider').value);try{const r=await fetch('/api/matching/start/'+REQUEST_ID,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({radius_km:radius})});const d=await r.json().catch(()=>({}));if(d.success){document.getElementById('searchState').textContent=d.count+' professional'+(d.count===1?'':'s')+' available now';document.getElementById('searchDetail').textContent=d.count?'Compare their profiles and select the professional you trust.':'No eligible online professionals in this radius yet.';}else document.getElementById('searchState').textContent=d.message||'Unable to find providers';await refreshAll();}catch(e){document.getElementById('searchState').textContent='Provider discovery is temporarily unavailable';document.getElementById('searchDetail').textContent=e.message||'Please refresh the page.';}}
+function providerCard(p){const photo=p.profile_photo_path?`<img class="provider-photo" src="/static/${esc(p.profile_photo_path)}" alt="${esc(p.name)}">`:`<div class="provider-photo placeholder">${esc((p.name||'P').slice(0,1).toUpperCase())}</div>`;const distance=p.distance_km==null?'Distance unavailable':`${p.distance_km} km away`;const eta=p.eta_minutes?`~${p.eta_minutes} min`:'ETA unavailable';const phone=p.masked_phone||'Phone not added';const pin=p.same_pin?'Same PIN region':'Nearby region';return `<article class="provider-choice" data-provider-id="${p.provider_id}"><div class="provider-head">${photo}<div class="provider-main"><h3>${esc(p.name)}</h3><div class="provider-meta"><span class="availability-dot">● Available now</span><span>★ ${Number(p.rating||0).toFixed(1)} (${p.review_count||0})</span></div><div class="provider-meta">${esc(distance)} · ${esc(eta)} · ${esc(pin)}</div></div><div class="trust-badge"><strong>${Number(p.trust_score||0).toFixed(0)}</strong><span>Trust score</span></div></div><div class="chips">${String(p.skills||'').split(/[,;|]/).filter(Boolean).slice(0,4).map(x=>`<span class="chip">${esc(x.trim())}</span>`).join('')}</div><div class="provider-info-grid"><div class="provider-info"><strong>${p.experience||0}+ yrs</strong><span>Experience</span></div><div class="provider-info"><strong>${p.completed_jobs||0}</strong><span>Completed</span></div><div class="provider-info"><strong>${esc(phone)}</strong><span>Mobile</span></div></div><div class="provider-bio">${esc(p.bio||'Professional profile available. Select this provider to start a private service conversation.')}</div><div class="provider-actions"><a class="outline-btn" href="/provider/${p.provider_id}" target="_blank">View profile</a><button class="outline-btn" onclick="toggleFavorite(${p.provider_id},this)">♡ Favorite</button><button class="primary-btn" onclick="selectProvider(${p.provider_id},'${esc(p.name).replace(/'/g,"\\'")}')">Select provider</button></div></article>`;}
+async function toggleFavorite(id,btn){const d=await fetch('/favorites/'+id+'/toggle',{method:'POST'}).then(r=>r.json());if(d.success)btn.textContent=d.favorited?'♥ Saved':'♡ Favorite';}
+async function refreshProviders(){const radius=Number(document.getElementById('radiusSlider').value);const r=await fetch('/api/nearby-providers/'+REQUEST_ID+'?radius='+radius,{cache:'no-store'});const d=await r.json();if(!d.success)return;document.getElementById('providerCount').textContent=d.count??d.providers.length;document.getElementById('searchState').textContent=`${d.count??d.providers.length} professional${(d.count??d.providers.length)===1?'':'s'} available now`;const list=document.getElementById('providerList');list.innerHTML=d.providers.length?d.providers.map(providerCard).join(''):'<div class="form-card"><strong>No providers are available right now.</strong><div class="muted">Keep this page open. SmartServe will refresh the service-area availability automatically.</div></div>';if(discoveryMap){const bounds=[];const customer=[Number({{service_request['customer_latitude']|float}}),Number({{service_request['customer_longitude']|float}})];bounds.push(customer);if(!customerMarker)customerMarker=L.marker(customer).addTo(discoveryMap).bindPopup('<b>You</b><br>Service location');else customerMarker.setLatLng(customer);d.providers.forEach(p=>{if(p.latitude==null||p.longitude==null)return;const ll=[Number(p.latitude),Number(p.longitude)];bounds.push(ll);if(!providerMarkers[p.provider_id])providerMarkers[p.provider_id]=L.marker(ll).addTo(discoveryMap).bindPopup(`<b>${esc(p.name)}</b><br>Trust ${Number(p.trust_score||0).toFixed(0)} · ★ ${Number(p.rating||0).toFixed(1)} · ${p.distance_km??'—'} km`);else providerMarkers[p.provider_id].setLatLng(ll);});if(bounds.length)discoveryMap.fitBounds(bounds,{padding:[35,35],maxZoom:15});}}
+async function refreshAll(){await Promise.all([refreshProviders(),refreshStatus()]);}
+async function refreshStatus(){const r=await fetch('/api/matching/status/'+REQUEST_ID,{cache:'no-store'});const d=await r.json();if(!d.success)return;const x=d.request;if(x.quote)document.getElementById('quoteValue').textContent=`₹${Number(x.quote.min).toLocaleString('en-IN')}–₹${Number(x.quote.max).toLocaleString('en-IN')}`;if(x.status==='ACCEPTED'){document.getElementById('searchTitle').textContent='Provider selected 🎉';document.getElementById('searchState').textContent=`${x.provider_name||'Your professional'} is ready`;document.getElementById('searchDetail').textContent='Your private chat, calling and negotiation are now available.';document.getElementById('selectingOverlay').classList.add('open');setTimeout(()=>location.href='/customer/dashboard#bookings',900);}}
+async function selectProvider(id,name){if(!confirm(`Select ${name} for this service?`))return;const overlay=document.getElementById('selectingOverlay');overlay.classList.add('open');document.getElementById('selectedTitle').textContent=`Selecting ${name}`;try{const r=await fetch(`/api/providers/select/${REQUEST_ID}/${id}`,{method:'POST',headers:{'Content-Type':'application/json'}});const d=await r.json();if(!r.ok||!d.success)throw Error(d.message||'Provider is no longer available.');document.getElementById('selectedTitle').textContent='Request sent to '+name+' ✓';document.getElementById('selectedText').textContent=d.message;setTimeout(()=>location.href='/customer/dashboard#bookings',900);}catch(e){overlay.classList.remove('open');alert(e.message);refreshAll();}}
+async function cancelSearch(){if(!confirm('Cancel this service request?'))return;await fetch('/api/service-request/'+REQUEST_ID+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:'Customer cancelled before provider selection'})});location.href='/customer/dashboard#bookings';}
+document.getElementById('radiusSlider').addEventListener('input',e=>{document.getElementById('radiusValue').textContent=e.target.value;});document.getElementById('radiusSlider').addEventListener('change',()=>{startMatching();});
+initDiscoveryMap();startMatching();setInterval(refreshAll,5000);
+</script>
+{% endblock %}
