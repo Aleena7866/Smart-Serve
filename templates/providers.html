@@ -15,7 +15,7 @@
       <div class="chips">{% for skill in p['skills'].replace(';',',').replace('|',',').split(',')[:4] %}<span class="chip">{{ skill.strip() }}</span>{% endfor %}</div>
       <div class="provider-info-grid"><div class="provider-info"><strong>{{ p['experience'] }}+ yrs</strong><span>Experience</span></div><div class="provider-info"><strong>{{ p['completed_jobs'] }}</strong><span>Completed</span></div><div class="provider-info"><strong>{{ p['masked_phone'] or 'Not added' }}</strong><span>Mobile</span></div></div>
       <div class="provider-bio">{{ p['bio'] or 'No bio added yet. Review the full profile before selecting.' }}</div>
-      <div class="provider-actions"><a class="outline-btn" href="{{ url_for('provider_profile',provider_id=p['provider_id']) }}" target="_blank">View profile</a><button class="primary-btn" onclick="selectProvider({{ p['provider_id'] }},{{ p['name']|tojson }})">Select provider</button></div>
+      <div class="provider-actions"><a class="outline-btn" href="{{ url_for('provider_profile',provider_id=p['provider_id']) }}" target="_blank">View profile</a><button class="primary-btn" data-provider-id="{{ p['provider_id'] }}" data-name="{{ p['name'] }}" onclick="selectProvider(Number(this.dataset.providerId),this.dataset.name)">Select provider</button></div>
     </article>
   {% else %}<div class="form-card"><h3>No eligible professionals right now</h3><p class="muted">Try a larger radius or ask a provider in this PIN area to go online.</p></div>{% endfor %}
   </div>

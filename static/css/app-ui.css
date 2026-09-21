@@ -87,7 +87,7 @@ small{font-size:var(--fs-xs)}
 :focus-visible{outline:3px solid color-mix(in srgb,var(--blue) 45%,transparent);outline-offset:2px;border-radius:var(--radius-xs)}
 ::selection{background:color-mix(in srgb,var(--blue) 22%,transparent)}
 .app-shell{min-height:100vh;display:flex;flex-direction:column}
-.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sr-only{position:absolute;left:0;top:0;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ---------- 3. Shell ----------------------------------------------- */
 .topbar{height:68px;position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:30px;
@@ -297,7 +297,7 @@ table.data tr:hover td{background:color-mix(in srgb,var(--card2) 70%,transparent
 .service-tile:nth-child(2) .service-icon{background:var(--yellow-soft)}.service-tile:nth-child(3) .service-icon{background:var(--card3)}.service-tile:nth-child(4) .service-icon{background:var(--green-soft)}.service-tile:nth-child(5) .service-icon{background:var(--purple-soft)}
 .service-tile strong{font-size:11.5px;display:block;line-height:1.3}
 .provider-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.provider-mini{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs)}
+.provider-mini{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-xs);min-width:0}.provider-mini>div{min-width:0}.provider-mini strong,.provider-mini .muted{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .provider-mini strong{font-size:13px;display:block}
 .avatar{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;flex:none;background:linear-gradient(135deg,#1a63f0,#4fa8ff);color:#fff;font-weight:800;font-size:18px;overflow:hidden;object-fit:cover;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),var(--shadow-xs)}
 img.avatar{display:block}
@@ -322,7 +322,7 @@ img.avatar{display:block}
 .smart-map .leaflet-container{height:100%;width:100%;font-family:var(--font)}
 .map-empty-state{position:absolute;z-index:500;inset:auto 18px 18px 18px;display:grid;gap:4px;justify-items:center;padding:14px;border-radius:14px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);box-shadow:var(--shadow);text-align:center;font-size:12px;color:var(--muted);backdrop-filter:blur(8px)}
 .map-empty-state strong{color:var(--text);font-size:13px}
-.map-status{position:absolute;z-index:500;top:12px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.map-status{position:absolute;z-index:500;top:12px;left:56px;right:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
 .map-status .pill{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:20px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);font-size:11px;font-weight:700;box-shadow:var(--shadow-xs);backdrop-filter:blur(8px)}
 .map-status .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
 .map-status .dot.live{background:var(--green);box-shadow:0 0 0 4px color-mix(in srgb,var(--green) 25%,transparent);animation:blink 1.6s infinite}

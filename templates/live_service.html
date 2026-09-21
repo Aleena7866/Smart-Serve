@@ -28,6 +28,7 @@
 .geo-note[data-state="denied"],.geo-note[data-state="error"]{color:var(--red)}
 .geo-note[data-state="live"]{color:var(--green)}
 @media(max-width:900px){.live-grid{grid-template-columns:1fr}.tracking-metrics strong{font-size:17px}}
+@media(max-width:560px){.tracking-metrics{grid-template-columns:1fr}.tracking-metrics > div{border-right:0;border-bottom:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;column-gap:12px;align-items:center;padding:10px 16px}.tracking-metrics > div:last-child{border-bottom:0}.tracking-metrics small{grid-column:1/-1}.tracking-metrics strong{font-size:16px}.tracking-metrics .geo-note{font-size:13px!important}}
 </style>
 {% endblock %}
 {% block content %}

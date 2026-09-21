@@ -52,6 +52,17 @@ Set a valid `GEMINI_API_KEY`. The default model is `gemini-2.5-flash`.
 
 Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`. Use test keys for development. The server creates orders and verifies the payment signature before marking a request paid.
 
+Optional endpoint overrides (host only, no `/v1` suffix):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RAZORPAY_BASE_URL` | `https://api.razorpay.com` | Razorpay API host (the SDK appends `/v1/...`) |
+| `OSRM_BASE_URL` | `https://router.project-osrm.org` | OSRM routing host used for road distance / ETA on the live map. Point it at a self-hosted OSRM if you prefer. If routing is unreachable the live page falls back to a clearly-labelled straight-line estimate. |
+| `SESSION_COOKIE_SECURE` | `0` | Set to `1` behind HTTPS; the session cookie then also uses `SameSite=None` so the app works inside embedded previews. |
+| `TEMPLATES_AUTO_RELOAD` | `0` | Set to `1` in development to pick up template edits without restarting. |
+
+The browser also needs to reach `checkout.razorpay.com` (Razorpay Checkout script) and `*.tile.openstreetmap.org` (map tiles).
+
 ## Real-time deployment
 
 The included Procfile uses one Gunicorn worker and many threads because Socket.IO rooms cannot safely be spread across independent Gunicorn workers without a message queue and sticky sessions. For horizontal scaling, add Redis as the Socket.IO message queue and configure sticky sessions/load balancing.

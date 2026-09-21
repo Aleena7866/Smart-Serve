@@ -88,7 +88,7 @@
           </div>
         {% endif %}
         {% if r['provider_id'] and r['status'] in ['ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
-          <div class="action-row customer-contact-actions"><button class="primary-btn" onclick="openChat({{ r['id'] }})">💬 Chat</button>{% if r['status'] != 'COMPLETED' %}<button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate</button>{% endif %}<button class="outline-btn" type="button" onclick="callSmartServe({{ (r['provider_phone'] or '')|tojson }},{{ (r['provider_name'] or 'Provider')|tojson }})">📞 Call</button>{% if r['status'] != 'COMPLETED' %}<a class="danger-btn btn-sm" href="{{ url_for('marketplace_features') }}#sos">🆘 SOS</a>{% endif %}</div>
+          <div class="action-row customer-contact-actions"><button class="primary-btn" onclick="openChat({{ r['id'] }})">💬 Chat</button>{% if r['status'] != 'COMPLETED' %}<button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate</button>{% endif %}<button class="outline-btn" type="button" data-phone="{{ r['provider_phone'] or '' }}" data-name="{{ r['provider_name'] or 'Provider' }}" onclick="callSmartServe(this.dataset.phone,this.dataset.name)">📞 Call</button>{% if r['status'] != 'COMPLETED' %}<a class="danger-btn btn-sm" href="{{ url_for('marketplace_features') }}#sos">🆘 SOS</a>{% endif %}</div>
         {% endif %}
         {% if r['status'] in ['SEARCHING','OFFERED'] %}<div class="match-note">🟢 Providers are available to compare. Choose the professional you trust based on trust score, profile, experience and distance.</div>{% endif %}
         {% if r['status']=='ARRIVED' %}

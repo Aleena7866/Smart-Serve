@@ -26,16 +26,28 @@
     return { latitude: c.latitude, longitude: c.longitude, accuracy: isFinite(c.accuracy) ? c.accuracy : null,
              heading: (c.heading != null && isFinite(c.heading)) ? c.heading : null, speed: (c.speed != null && isFinite(c.speed)) ? c.speed : null };
   }
+  var pendingTimer = null, latestPos = null, trackingActive = false;
+  function flushPending() { pendingTimer = null; if (latestPos) sendLocation(latestPos, true); }
   async function sendLocation(pos, force) {
     var now = Date.now(), p = payloadFrom(pos);
-    if (!force && now - lastSent < SEND_MS - 300) return false;
-    if (!force && lastPos && distanceM(lastPos, p) < MIN_MOVE_M && now - lastSent < 15000) return false; // stationary: send at most every 15 s
+    latestPos = pos;
+    if (!force && now - lastSent < SEND_MS - 300) {
+      // Rate-limited: never drop a fix silently. Deliver the newest position when the window ends,
+      // otherwise a single move made right after a send would not be visible until the next GPS event.
+      if (!pendingTimer) pendingTimer = setTimeout(flushPending, SEND_MS - (now - lastSent));
+      return false;
+    }
+    // Stationary device: resend a heartbeat often enough that the other party never sees us as "stale"
+    // (server marks live <= 25 s). Outside an active service, 15 s is plenty.
+    var heartbeat = trackingActive ? 12000 : 15000;
+    if (!force && lastPos && distanceM(lastPos, p) < MIN_MOVE_M && now - lastSent < heartbeat) { if (!pendingTimer) pendingTimer = setTimeout(flushPending, heartbeat - (now - lastSent)); return false; }
+    if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
     lastSent = now;
     try {
       if (socket && socket.connected) { socket.emit('share_location', p); }
       var r = await fetch('/api/location/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) });
       var d = await r.json().catch(function () { return {}; });
-      if (r.ok && d.success) { lastPos = p; if (d.active_requests && d.active_requests.length) setLocationState('GPS active · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), 'live'); else if (window.smartservePinActive) setLocationState('PIN service area active · GPS ready for live tracking', 'ready'); else setLocationState('GPS ready · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'live'); return true; }
+      if (r.ok && d.success) { lastPos = p; trackingActive = !!(d.active_requests && d.active_requests.length); if (trackingActive && !pendingTimer) pendingTimer = setTimeout(flushPending, 12000); if (d.active_requests && d.active_requests.length) setLocationState('GPS active · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }), 'live'); else if (window.smartservePinActive) setLocationState('PIN service area active · GPS ready for live tracking', 'ready'); else setLocationState('GPS ready · updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'live'); return true; }
       setLocationState(d.message || 'Location could not be saved.', 'error');
       return false;
     } catch (e) { setLocationState('Offline · location not sent. Reconnecting…', 'offline'); return false; }
@@ -152,7 +164,7 @@
     var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
     var tileFailed = false;
     tiles.on('tileerror', function () { if (!tileFailed) { tileFailed = true; setBanner('Map tiles could not load (offline?). Live positions and ETA still update below.'); } });
-    tiles.on('load', function () { if (tileFailed) { tileFailed = false; setBanner(''); } });
+    tiles.on('tileload', function () { if (tileFailed) { tileFailed = false; setBanner(''); } });
 
     var overlay = document.createElement('div'); overlay.className = 'map-status'; el.appendChild(overlay);
     var empty = document.createElement('div'); empty.className = 'map-empty-state'; el.appendChild(empty);
@@ -188,7 +200,8 @@
         var key = JSON.stringify(coords.length > 2 ? [coords[0], coords[coords.length - 1], coords.length] : coords);
         if (key !== lastRouteKey) {
           lastRouteKey = key;
-          var style = d.route ? { weight: 5, opacity: .85, color: '#1a63f0' } : { weight: 4, dashArray: '9 9', opacity: .6, color: '#66758f' };
+          // dashArray must be set explicitly both ways: Leaflet's setStyle keeps a previous dashArray otherwise.
+          var style = d.route ? { weight: 5, opacity: .85, color: '#1a63f0', dashArray: null } : { weight: 4, dashArray: '9 9', opacity: .6, color: '#66758f' };
           if (routeLine) { routeLine.setLatLngs(coords); routeLine.setStyle(style); } else routeLine = L.polyline(coords, style).addTo(map);
         }
       } else if (routeLine) { map.removeLayer(routeLine); routeLine = null; lastRouteKey = ''; }

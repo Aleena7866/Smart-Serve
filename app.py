@@ -49,6 +49,7 @@ from werkzeug.security import (
 
 from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
+from flask.sessions import SecureCookieSessionInterface
 
 from database import get_db_connection, init_database
 from matching import start_wave, accept_offer, reject_offer, expire_and_requeue, candidates, available_providers, haversine, diagnose
@@ -68,11 +69,30 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "smart-serve-development-key")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+# Opt-in template auto reload (TEMPLATES_AUTO_RELOAD=1) so template edits show without restarting a non-debug server.
+app.config["TEMPLATES_AUTO_RELOAD"] = os.getenv("TEMPLATES_AUTO_RELOAD", "0") == "1"
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.getenv("SESSION_COOKIE_SECURE", "0") == "1",
 )
+
+
+class _TransportAwareSessionInterface(SecureCookieSessionInterface):
+    """Over HTTPS (incl. reverse proxies / embedded previews) the session cookie must be
+    `SameSite=None; Secure`, otherwise browsers drop it inside iframes and the login loops.
+    Over plain HTTP (local development) we keep `Lax`, because `None` requires `Secure`."""
+
+    def get_cookie_secure(self, app):
+        return bool(request and request.is_secure) or super().get_cookie_secure(app)
+
+    def get_cookie_samesite(self, app):
+        if request and request.is_secure:
+            return "None"
+        return super().get_cookie_samesite(app)
+
+
+app.session_interface = _TransportAwareSessionInterface()
 
 # ---------------- EMAIL NOTIFICATIONS ----------------
 # SMTP is optional: authentication must never fail just because an email could not be sent.
@@ -245,8 +265,11 @@ if GOOGLE_OAUTH_ENABLED:
 
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
+# RAZORPAY_BASE_URL (host only, e.g. http://127.0.0.1:5055) points the SDK at a local
+# Razorpay-compatible stub during automated tests. Leave it unset in production (api.razorpay.com).
+RAZORPAY_BASE_URL = os.getenv("RAZORPAY_BASE_URL", "").strip()
 razorpay_client = (
-    razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+    razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET), **({"base_url": RAZORPAY_BASE_URL} if RAZORPAY_BASE_URL else {}))
     if razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET
     else None
 )
@@ -2599,7 +2622,9 @@ def _route_between(origin, destination):
     now = time.monotonic()
     with _route_cache_lock:
         cached = _route_cache.get(key)
-        if cached and now - cached[0] < 20:
+        # Successful routes are reused for 20 s; failures only for 5 s so the road route
+        # returns as soon as the routing service is reachable again.
+        if cached and now - cached[0] < (20 if cached[1] else 5):
             return cached[1]
     result = None
     try:
@@ -2842,8 +2867,10 @@ def create_payment_order(request_id):
         connection.commit()
     except Exception as exc:
         connection.close()
-        print("RAZORPAY ORDER ERROR:", exc)
-        return jsonify({"success": False, "message": "Could not create payment order."}), 502
+        app.logger.error("Razorpay order creation failed for request %s: %r", request_id, exc)
+        detail = str(getattr(exc, "args", [""])[0] or "")[:160]
+        hint = " Check RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET (use the matching test-mode keys) and outbound access to api.razorpay.com." if "uthentication" in detail or "401" in detail else ""
+        return jsonify({"success": False, "message": "Could not create the payment order." + (f" Razorpay said: {detail}." if detail else "") + hint}), 502
 
     connection.close()
     return jsonify({
