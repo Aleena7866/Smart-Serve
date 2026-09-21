@@ -1,22 +1,97 @@
 {% extends "base.html" %}
-{% block title %}SmartServe | Live Service{% endblock %}
+{% block title %}SmartServe · Live service #{{ service['id'] }}{% endblock %}
+{% block head %}
+<style>
+.live-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr);gap:16px;align-items:start}
+.map-card{overflow:hidden;position:relative;border:1px solid var(--line);border-radius:22px;background:var(--card);box-shadow:var(--shadow-xs)}
+.map-card .smart-map{height:min(62vh,560px);min-height:360px}
+.tracking-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.tracking-metrics{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line)}
+.tracking-metrics > div{padding:12px 16px;border-right:1px solid var(--line)}.tracking-metrics > div:last-child{border-right:0}
+.tracking-metrics small{display:block;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.tracking-metrics strong{font-size:20px;letter-spacing:-.02em}.tracking-metrics span{display:block;font-size:12px;color:var(--muted)}
+.route-legend{display:flex;gap:16px;padding:8px 16px 12px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.service-panel{display:grid;gap:14px}
+.party{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--card2)}
+.party .avatar{width:46px;height:46px;font-size:18px}
+.party small{display:block;color:var(--muted)}
+.confirmation-box{padding:20px;border:1px solid color-mix(in srgb,var(--green) 40%,var(--line));background:var(--green-soft);border-radius:18px;text-align:center}
+.confirmation-box small{font-weight:800;letter-spacing:.08em;color:var(--green)}
+.confirmation-box strong{display:block;font-size:34px;letter-spacing:8px;margin:6px 0;font-variant-numeric:tabular-nums}
+.confirmation-box p{font-size:12px;color:var(--muted);margin:0}
+.proof-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:8px}
+.proof-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;border:1px solid var(--line)}
+.service-tools{display:flex;gap:8px;flex-wrap:wrap}
+.timeline{display:grid;gap:6px;font-size:12.5px}.timeline div{display:flex;gap:8px;align-items:center;color:var(--muted)}.timeline .dot{width:8px;height:8px;border-radius:50%;background:var(--line-strong);flex:none}.timeline .done{color:var(--text)}.timeline .done .dot{background:var(--green)}.timeline .now{color:var(--blue);font-weight:800}.timeline .now .dot{background:var(--blue);box-shadow:0 0 0 4px var(--blue-soft)}
+.action-form{display:grid;gap:8px}
+.geo-note{font-size:12px;color:var(--muted)}
+.geo-note[data-state="denied"],.geo-note[data-state="error"]{color:var(--red)}
+.geo-note[data-state="live"]{color:var(--green)}
+@media(max-width:900px){.live-grid{grid-template-columns:1fr}.tracking-metrics strong{font-size:17px}}
+</style>
+{% endblock %}
 {% block content %}
-<div class="page live-page"><div class="greeting"><div><div class="eyebrow">LIVE SERVICE</div><h1>{{ service['service_name'] }}</h1><div class="muted">{{ service['customer_name'] }} ↔ {{ service['provider_name'] or 'Provider not selected' }}</div></div><button class="outline-btn" onclick="history.back()">← Back</button></div>
-<div class="live-grid"><section class="map-card"><div class="tracking-head"><strong>🗺️ Live route</strong><span class="chip" id="routeState">Connecting…</span></div><div id="serviceMap" style="height:480px"></div><div class="route-legend"><span>🔵 Customer</span><span>🟢 Provider</span><span>━━ Service route</span></div></section>
-<section class="form-card service-panel"><div class="service-status"><span class="status-pill blue" id="statusPill">{{ service['status'].replace('_',' ') }}</span><h2 id="statusTitle">Service status</h2><p class="muted" id="statusText">Realtime service lifecycle.</p></div>
-{% if role=='customer' %}<div id="customerCode" class="confirmation-box" style="display:none"><small>PRIVATE CUSTOMER CODE</small><strong id="codeValue">------</strong><p>Tell this code to the provider only after confirming they reached your home/office.</p></div>{% endif %}
-{% if role=='provider' %}<div id="providerActions"></div>{% endif %}
-<div id="proofBox" class="proof-box"></div>
-<div class="service-tools">{% if role=='customer' and service['provider_phone'] %}<a class="primary-btn" href="tel:{{ service['provider_phone'] }}">📞 Call provider</a>{% elif role=='provider' and service['customer_phone'] %}<a class="primary-btn" href="tel:{{ service['customer_phone'] }}">📞 Call customer</a>{% endif %}<button class="danger-btn" onclick="sendSOS()">🆘 SOS</button><button class="outline-btn" onclick="openDispute()">⚑ Report issue</button></div></section></div></div>
-<style>.live-grid{display:grid;grid-template-columns:1.45fr .75fr;gap:14px}.route-legend{display:flex;gap:16px;padding:10px;font-size:11px;color:var(--muted)}.service-panel{min-height:480px}.confirmation-box{margin-top:16px;padding:22px;border:1px solid #17c98b66;background:#0b7d4d18;border-radius:20px;text-align:center}.confirmation-box strong{display:block;font-size:34px;letter-spacing:8px;margin:8px}.confirmation-box p{font-size:11px;color:var(--muted)}.proof-box img{width:100%;max-height:180px;object-fit:cover;border-radius:14px;margin-top:8px}.service-tools{display:flex;gap:8px;margin-top:18px}.danger-btn{border:1px solid #ef535066;background:#ef535012;color:#ff8585;border-radius:12px;padding:10px 14px;font-weight:800}.action-form{display:grid;gap:8px;margin-top:14px}.action-form input{padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:inherit}.action-form button{padding:12px;border-radius:12px;border:0;background:var(--blue);color:white;font-weight:800}.live-page .map-card{overflow:hidden}@media(max-width:850px){.live-grid{grid-template-columns:1fr}.service-panel{min-height:auto}}</style>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
-const RID={{ service['id'] }};const ROLE={{ role|tojson }};let map,cm,pm,line;
-function init(){map=L.map('serviceMap').setView([20,78],5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);refresh();setInterval(refresh,3000)}
-function marker(existing,lat,lon,text,icon){const m=existing||L.circleMarker([lat,lon],{radius:9});m.setLatLng([lat,lon]).bindPopup(text);if(!existing)m.addTo(map);return m}
-async function drawRoadRoute(c,p){try{const u=`https://router.project-osrm.org/route/v1/driving/${p.lon},${p.lat};${c.lon},${c.lat}?overview=full&geometries=geojson`;const d=await fetch(u).then(r=>r.json());const coords=d.routes?.[0]?.geometry?.coordinates?.map(x=>[x[1],x[0]])||[[p.lat,p.lon],[c.lat,c.lon]];if(line)line.setLatLngs(coords);else line=L.polyline(coords,{weight:5,dashArray:'8 7'}).addTo(map)}catch(e){const pts=[[p.lat,p.lon],[c.lat,c.lon]];if(line)line.setLatLngs(pts);else line=L.polyline(pts,{weight:4,dashArray:'8 7'}).addTo(map)}}
-async function refresh(){try{const d=await fetch('/api/service/'+RID+'/route',{cache:'no-store'}).then(r=>r.json());if(!d.success)return;const c=d.customer,p=d.provider;const bounds=[];if(c.lat!=null){cm=marker(cm,c.lat,c.lon,'<b>Customer</b>',1);bounds.push([c.lat,c.lon])}if(p.lat!=null){pm=marker(pm,p.lat,p.lon,'<b>Provider</b>',2);bounds.push([p.lat,p.lon])}if(c.lat!=null&&p.lat!=null){await drawRoadRoute(c,p);if(bounds.length>1)map.fitBounds(bounds,{padding:[30,30],maxZoom:16});document.getElementById('routeState').textContent='Road route';}else document.getElementById('routeState').textContent='Waiting for location';const near=await fetch('/api/service/'+RID+'/arrival-check',{cache:'no-store'}).then(r=>r.json()).catch(()=>({}));if(ROLE==='provider'&&near.nearby)document.getElementById('routeState').textContent='📍 You are within 200 m of customer';const st=await fetch('/api/matching/status/'+RID,{cache:'no-store'}).then(r=>r.json());if(st.success)render(st.request);}catch(e){}}
-function render(r){const pill=document.getElementById('statusPill');pill.textContent=String(r.status||'').replaceAll('_',' ');document.getElementById('statusTitle').textContent=String(r.status||'').replaceAll('_',' ');if(ROLE==='customer'&&['ACCEPTED','ARRIVED'].includes(r.status)&&r.confirmation_code){document.getElementById('customerCode').style.display='block';document.getElementById('codeValue').textContent=r.confirmation_code;}if(ROLE==='provider'){const box=document.getElementById('providerActions');if(r.status==='ACCEPTED')box.innerHTML='<form class="action-form" method="post" action="/update-service-status/'+RID+'/ARRIVED"><button>📍 I have arrived</button></form>';else if(r.status==='ARRIVED')box.innerHTML='<form class="action-form" method="post" action="/provider/confirm-arrival/'+RID+'"><input name="confirmation_code" inputmode="numeric" maxlength="6" placeholder="Customer confirmation code" required><button>✓ Verify code & start service</button></form>';else if(r.status==='IN_PROGRESS')box.innerHTML='<form class="action-form" method="post" enctype="multipart/form-data" action="/submit-completion-proof/'+RID+'"><input type="file" name="proof_images" accept="image/*" multiple required><button>📸 Upload completion proof</button></form>';else box.innerHTML='';}if(r.completion_proof_paths){const paths=Array.isArray(r.completion_proof_paths)?r.completion_proof_paths:[];document.getElementById('proofBox').innerHTML=paths.length?'<h3>Completion proof</h3>'+paths.map(x=>`<a href="/service-proof/${RID}/${encodeURIComponent(String(x).replace(/^uploads\//,''))}" target="_blank" rel="noopener"><img src="/service-proof/${RID}/${encodeURIComponent(String(x).replace(/^uploads\//,''))}" alt="Completion proof"></a>`).join(''):'';}fetch('/api/service/'+RID+'/warranty').then(x=>x.json()).then(w=>{if(w.warranty)document.getElementById('proofBox').innerHTML += `<div class="form-card" style="margin-top:10px"><strong>🛡️ ${w.warranty.warranty_days}-day service warranty</strong><p class="muted">Valid until ${w.warranty.warranty_until||'the warranty date'}</p></div>`})}
-async function sendSOS(){const r=await fetch('/api/sos/'+RID,{method:'POST'});const d=await r.json();alert(d.message||'SOS sent');}
-async function openDispute(){const reason=prompt('Issue reason (e.g. incomplete work, damage, overcharging)');if(!reason)return;const desc=prompt('Describe the issue')||'';const r=await fetch('/api/disputes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:RID,reason,description:desc})});const d=await r.json();alert(d.message||'Dispute submitted');}
-init();</script>
+{% set active = service['status'] in ['ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS'] %}
+<div class="page live-page" style="max-width:1180px">
+  <div class="greeting reveal">
+    <div><span class="eyebrow">Live service · #{{ service['id'] }}</span><h1>{{ service['service_name'] }}</h1><p class="muted">{{ service['customer_name'] }} ↔ {{ service['provider_name'] or 'Provider not assigned yet' }}{% if service['scheduled_at'] %} · scheduled {{ service['scheduled_at'] }}{% endif %}</p></div>
+    <div class="row"><button class="outline-btn" onclick="history.length>1?history.back():location.assign('{{ url_for('customer_dashboard' if role=='customer' else 'provider_dashboard') }}')">← Back</button></div>
+  </div>
+
+  <div class="live-grid">
+    <section class="map-card reveal" data-request-id="{{ service['id'] }}">
+      <div class="tracking-head"><strong>🗺️ Two-way live tracking</strong><span class="chip" data-live-location-status>{{ 'Connecting…' if active else 'Tracking finished' }}</span></div>
+      <div class="smart-map" data-request-id="{{ service['id'] }}" data-manual="1" id="serviceMap" role="img" aria-label="Live map of customer and provider positions"></div>
+      <div class="tracking-metrics"><div><small>Distance</small><strong data-distance>—</strong><span>between you both</span></div><div><small>ETA</small><strong data-eta-value>—</strong><span data-eta-note>needs both live locations</span></div><div><small>Your GPS</small><strong style="font-size:14px" class="geo-note" data-location-note data-state="idle">Starting…</strong><span data-arrival-hint></span></div></div>
+      <div class="route-legend"><span>🟢 Customer</span><span>🔵 Provider</span><span>━━ Road route (OSRM)</span><span>┅┅ Straight-line estimate when routing is unavailable</span></div>
+    </section>
+
+    <section class="form-card service-panel reveal">
+      <div><span class="status-pill request-status blue" id="statusPill" style="margin:0">{{ service['status'].replace('_',' ') }}</span><h2 id="statusTitle" style="font-size:18px;margin:10px 0 4px">Service status</h2><p class="muted" id="statusText" style="margin:0">Updates automatically as the service progresses.</p></div>
+      <div class="timeline" id="timeline"></div>
+
+      {% if role=='customer' %}
+        {% if service['provider_name'] %}<div class="party">{% if service['provider_photo_url'] %}<img class="avatar" src="{{ service['provider_photo_url'] }}" alt="">{% else %}<span class="avatar">{{ service['provider_name'][:1]|upper }}</span>{% endif %}<div><strong>{{ service['provider_name'] }}</strong><small>Your provider{% if service['provider_rating'] %} · ★ {{ '%.1f'|format(service['provider_rating']) }}{% endif %}{% if service['ekyc_status']=='VERIFIED' %} · ✓ ID verified{% endif %}</small></div></div>{% endif %}
+        <div id="customerCode" class="confirmation-box" style="display:none"><small>PRIVATE CONFIRMATION CODE</small><strong id="codeValue">------</strong><p>Share this code with the provider only after they have physically arrived at your location.</p></div>
+      {% else %}
+        <div class="party"><span class="avatar">{{ service['customer_name'][:1]|upper }}</span><div><strong>{{ service['customer_name'] }}</strong><small>Customer{% if service['customer_pincode'] %} · PIN {{ service['customer_pincode'] }}{% endif %}</small>{% if service['address_text'] %}<small>📍 {{ service['address_text'] }}</small>{% endif %}</div></div>
+        <div id="providerActions"></div>
+      {% endif %}
+
+      <div id="proofBox"></div>
+      <div id="warrantyBox"></div>
+
+      <div class="service-tools">
+        {% if role=='customer' and service['provider_phone'] %}<a class="primary-btn" href="tel:{{ service['provider_phone'] }}">📞 Call provider</a>{% elif role=='provider' and service['customer_phone'] %}<a class="primary-btn" href="tel:{{ service['customer_phone'] }}">📞 Call customer</a>{% endif %}
+        <button class="outline-btn" onclick="openChat({{ service['id'] }})">💬 Chat</button>
+        <button class="outline-btn" onclick="requestLocationNow(this)">📍 Share my location</button>
+        {% if active %}<button class="danger-btn" onclick="liveSOS()">🆘 SOS</button>{% endif %}
+        <button class="outline-btn" onclick="liveDispute()">⚑ Report issue</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:0">Only you and the other party of this service can see these positions. Location sharing stops automatically when the service ends.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const RID={{ service['id'] }};const ROLE={{ role|tojson }};
+const STEPS=[['ASSIGNED','Provider assigned'],['ACCEPTED','Provider on the way'],['ARRIVED','Provider arrived'],['IN_PROGRESS','Work in progress'],['AWAITING_VERIFICATION','Awaiting your verification'],['AWAITING_PAYMENT','Awaiting payment'],['COMPLETED','Completed']];
+const TEXT={ASSIGNED:'Waiting for the provider to accept.',ACCEPTED:'The provider is travelling to you. Live ETA updates as both devices share GPS.',ARRIVED:'The provider reports being on site. Confirm with the private code.',IN_PROGRESS:'The service is in progress.',AWAITING_VERIFICATION:'The provider uploaded completion proof. The customer verifies the work next.',AWAITING_PAYMENT:'Work verified. Payment completes the service and starts the warranty.',COMPLETED:'This service is complete.',CANCELLED:'This service was cancelled.',REJECTED:'The provider declined this request.',EXPIRED:'No provider accepted in time.'};
+let tracker=null,lastStatus=null;
+function startTracker(){const el=document.getElementById('serviceMap');if(!window.SmartTracker){setTimeout(startTracker,150);return;}if(!window.L){el.innerHTML='<div class="map-empty-state" style="position:static;display:grid"><strong>Map library unavailable</strong><span>Distance and ETA still update from live GPS.</span></div>';return;}tracker=window.SmartTracker(el,{container:el.closest('.map-card'),onUpdate:d=>{if(d.status&&d.status!==lastStatus)refreshStatus();}});}
+function renderTimeline(status){const idx=STEPS.findIndex(s=>s[0]===status);const box=document.getElementById('timeline');if(['CANCELLED','REJECTED','EXPIRED'].includes(status)){box.innerHTML='<div class="now"><span class="dot" style="background:var(--red);box-shadow:none"></span>'+escapeHtml(status.replace(/_/g,' '))+'</div>';return;}box.innerHTML=STEPS.map((s,i)=>`<div class="${i<idx?'done':i===idx?'now':''}"><span class="dot"></span>${s[1]}</div>`).join('');}
+async function refreshStatus(){const st=await api('/api/matching/status/'+RID);if(!st.success)return;const r=st.request;const s=String(r.status||'');lastStatus=s;document.getElementById('statusPill').textContent=s.replace(/_/g,' ');document.getElementById('statusTitle').textContent=(STEPS.find(x=>x[0]===s)||[,s.replace(/_/g,' ')])[1];document.getElementById('statusText').textContent=TEXT[s]||'';renderTimeline(s);
+  if(ROLE==='customer'){const box=document.getElementById('customerCode');if(['ACCEPTED','ARRIVED'].includes(s)&&r.confirmation_code){box.style.display='block';document.getElementById('codeValue').textContent=r.confirmation_code;}else box.style.display='none';}
+  if(ROLE==='provider'){const box=document.getElementById('providerActions');if(s==='ACCEPTED')box.innerHTML='<form class="action-form" method="post" action="/update-service-status/'+RID+'/ARRIVED"><button class="primary-btn btn-block" data-busy-text="Updating…">📍 I have arrived</button><span class="muted" style="font-size:12px">Tap once you are physically at the customer’s location.</span></form>';else if(s==='ARRIVED')box.innerHTML='<form class="action-form" method="post" action="/provider/confirm-arrival/'+RID+'"><label>Customer confirmation code</label><input class="input" name="confirmation_code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" required autocomplete="one-time-code"><button class="primary-btn btn-block" data-busy-text="Verifying…">✓ Verify code & start service</button></form>';else if(s==='IN_PROGRESS')box.innerHTML='<form class="action-form" method="post" enctype="multipart/form-data" action="/submit-completion-proof/'+RID+'"><label>Completion photos (JPG, PNG or WEBP)</label><input class="input" type="file" name="proof_images" accept="image/jpeg,image/png,image/webp" multiple required><button class="primary-btn btn-block" data-busy-text="Uploading…">📸 Upload completion proof</button></form>';else if(s==='ASSIGNED')box.innerHTML='<form class="action-form" method="post" action="/provider-response/'+RID+'/accept"><button class="primary-btn btn-block" data-busy-text="Accepting…">✓ Accept this job</button></form>';else box.innerHTML='';}
+  const paths=Array.isArray(r.completion_proof_paths)?r.completion_proof_paths:[];document.getElementById('proofBox').innerHTML=paths.length?'<strong style="font-size:13px">Completion proof</strong><div class="proof-grid">'+paths.map(x=>{const f=encodeURIComponent(String(x).replace(/^uploads\//,''));return `<a href="/service-proof/${RID}/${f}" target="_blank" rel="noopener"><img src="/service-proof/${RID}/${f}" alt="Completion proof" loading="lazy"></a>`;}).join('')+'</div>'+(ROLE==='customer'&&s==='AWAITING_VERIFICATION'?'<a class="primary-btn btn-block" style="margin-top:10px" href="/customer/dashboard#request-'+RID+'">Verify work & continue to payment →</a>':''):'';
+  if(ROLE==='customer'&&s==='AWAITING_PAYMENT')document.getElementById('proofBox').innerHTML+='<a class="primary-btn btn-block" style="margin-top:10px" href="/customer/dashboard#request-'+RID+'">Pay securely on your dashboard →</a>';
+  if(s==='COMPLETED'){const w=await api('/api/service/'+RID+'/warranty');if(w.success&&w.warranty)document.getElementById('warrantyBox').innerHTML=`<div class="notice ${w.warranty.status==='ACTIVE'?'success':''}"><span>🛡️</span><span><strong>${w.warranty.warranty_days}-day service warranty · ${w.warranty.status.toLowerCase()}</strong><br>Valid until ${w.warranty.warranty_until}</span></div>`;}
+}
+async function liveSOS(){const card=showModal(`<div class="modal-head"><div><h3>🆘 Emergency safety alert</h3><p class="muted" style="margin:0">Service #${RID}</p></div><button class="modal-close" onclick="closeModal()">×</button></div><div class="notice danger"><span>⚠️</span><span><strong>In immediate danger? Call 112 first.</strong> The SmartServe SOS alerts operations with this service, the other party and your live location.</span></div><label>What is happening? <span class="optional">optional</span></label><textarea class="input" id="sosNote" maxlength="300"></textarea><div class="action-row"><a class="danger-btn" href="tel:112">📞 Call 112</a><button class="primary-btn" id="sosBtn">🆘 Send SmartServe SOS</button></div>`);
+  card.querySelector('#sosBtn').onclick=async function(){this.disabled=true;this.textContent='Sending…';const body={message:card.querySelector('#sosNote').value};const me=tracker&&tracker.getData()&&tracker.getData()[ROLE];if(me&&me.live&&me.latitude!=null){body.latitude=me.latitude;body.longitude=me.longitude;}const d=await api('/api/sos/'+RID,{method:'POST',body});if(!d.success){this.disabled=false;this.textContent='🆘 Send SmartServe SOS';showToast(d.message,'error');return;}closeModal();showToast(d.message,'success',8000);};}
+async function liveDispute(){const d=await api('/api/disputes');const reasons=(d.reasons||[]).map(r=>`<option>${escapeHtml(r)}</option>`).join('');const card=showModal(`<div class="modal-head"><div><h3>⚑ Report a service issue</h3><p class="muted" style="margin:0">Service #${RID} · reviewed by SmartServe operations.</p></div><button class="modal-close" onclick="closeModal()">×</button></div><form class="tool-form" id="dForm"><label>Issue type</label><select class="input" name="reason">${reasons}</select><label>What happened?</label><textarea class="input" name="description" minlength="10" maxlength="1000" required placeholder="Describe the problem and the resolution you expect."></textarea><button class="primary-btn btn-block">Open dispute</button></form>`);
+  card.querySelector('#dForm').onsubmit=async e=>{e.preventDefault();const f=e.target;const r=await api('/api/disputes',{method:'POST',body:{request_id:RID,reason:f.reason.value,description:f.description.value}});if(!r.success){showToast(r.message,'error');return;}closeModal();showToast(r.message,'success');};}
+startTracker();refreshStatus();setInterval(refreshStatus,10000);
+</script>
 {% endblock %}

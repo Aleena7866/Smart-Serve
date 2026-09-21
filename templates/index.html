@@ -1,781 +1,186 @@
 {% extends "base.html" %}
-
-{% block title %}
-Smart Serve | Solve. Serve. Earn.
+{% block title %}SmartServe · Solve. Serve. Earn.{% endblock %}
+{% block head %}
+<style>
+.landing{width:min(1180px,100%);margin:auto;padding:24px 20px 80px}
+.landing-top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:34px}
+.landing-top .brand{font-size:22px}
+.landing-top nav{display:flex;gap:10px;align-items:center}
+.hero{display:grid;grid-template-columns:1.1fr .9fr;gap:34px;align-items:center;padding:20px 0 40px}
+.hero h1{font-size:clamp(34px,5vw,58px);line-height:1.04;letter-spacing:-.035em;margin:14px 0 18px}
+.hero h1 span{background:linear-gradient(90deg,var(--blue),#7b5cf5);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p{font-size:16px;color:var(--muted);max-width:540px;line-height:1.7}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}
+.hero-stats{display:flex;gap:28px;margin-top:30px;flex-wrap:wrap}
+.hero-stats strong{display:block;font-size:24px;letter-spacing:-.03em}
+.hero-stats span{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.hero-visual{position:relative;perspective:1200px}
+.hero-stack{position:relative;height:420px}
+.hero-stack .card{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:var(--shadow-lg);transform-style:preserve-3d;transition:transform var(--t-slow) var(--ease)}
+.hero-stack .c1{left:0;top:30px;width:64%;transform:rotateY(-8deg) rotateX(4deg)}
+.hero-stack .c2{right:0;top:0;width:52%;transform:rotateY(8deg) rotateX(3deg) translateZ(30px)}
+.hero-stack .c3{right:10%;bottom:0;width:60%;transform:rotateY(-4deg) rotateX(-3deg) translateZ(60px)}
+.hero-stack .card:hover{transform:translateZ(80px) rotateX(0) rotateY(0)}
+.hero-stack .row{display:flex;align-items:center;gap:12px}
+.mini-map{height:120px;border-radius:14px;background:linear-gradient(135deg,#dfe9ff,#eaf7ff);position:relative;overflow:hidden;margin-top:12px}
+.mini-map:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(26,99,240,.10) 1px,transparent 1px),linear-gradient(90deg,rgba(26,99,240,.10) 1px,transparent 1px);background-size:20px 20px}
+.mini-map .route{position:absolute;left:14%;top:70%;width:70%;height:3px;background:linear-gradient(90deg,var(--blue),var(--green));transform:rotate(-22deg);transform-origin:left;border-radius:3px}
+.mini-map .pin{position:absolute;width:22px;height:22px;border-radius:50%;border:3px solid #fff;box-shadow:0 6px 14px rgba(0,0,0,.2)}
+.mini-map .pin.a{left:11%;top:62%;background:var(--blue);animation:blink 1.6s infinite}.mini-map .pin.b{right:14%;top:20%;background:var(--green)}
+:root[data-theme=dark] .mini-map{background:linear-gradient(135deg,#12244a,#0f2a3f)}
+.section{padding:44px 0 10px}
+.section-heading{max-width:620px;margin-bottom:24px}
+.section-heading h2{font-size:clamp(24px,3vw,34px);letter-spacing:-.03em;margin:6px 0 8px}
+.section-heading p{color:var(--muted);font-size:15px}
+.choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.choice-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-xl);padding:28px;box-shadow:var(--shadow-sm);display:grid;gap:14px;position:relative;overflow:hidden;transition:transform var(--t) var(--ease),box-shadow var(--t)}
+.choice-card:hover{transform:translateY(-5px);box-shadow:var(--shadow-lg)}
+.choice-card:before{content:"";position:absolute;inset:0 0 auto 0;height:5px;background:linear-gradient(90deg,var(--blue),var(--blue2))}
+.choice-card.provider:before{background:linear-gradient(90deg,var(--green),#3fd39a)}
+.choice-card h2{font-size:24px;margin:0}
+.choice-card ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;color:var(--text-2);font-size:14px}
+.choice-card li:before{content:"✓";color:var(--green);font-weight:900;margin-right:8px}
+.choice-icon{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;font-size:26px;background:var(--blue-soft)}
+.choice-card.provider .choice-icon{background:var(--green-soft)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;counter-reset:step}
+.step-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-lg);padding:22px;box-shadow:var(--shadow-xs);position:relative;transition:transform var(--t) var(--ease),box-shadow var(--t)}
+.step-card:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
+.step-card .num{font-size:12px;font-weight:800;color:var(--blue);letter-spacing:.1em}
+.step-card .ico{font-size:30px;margin:10px 0 8px}
+.step-card h3{font-size:16px;margin:0 0 6px}.step-card p{font-size:13.5px;color:var(--muted);margin:0;line-height:1.6}
+.landing-services{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.landing-services a{display:grid;gap:8px;justify-items:center;text-align:center;padding:20px 12px;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-xs);transition:transform var(--t) var(--ease-spring),box-shadow var(--t),border-color var(--t)}
+.landing-services a:hover{transform:translateY(-4px) scale(1.02);box-shadow:var(--shadow);border-color:color-mix(in srgb,var(--blue) 40%,var(--line))}
+.landing-services .ico{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:22px;background:var(--blue-soft)}
+.landing-services strong{font-size:13px}.landing-services small{color:var(--muted)}
+.trust{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.trust-card{padding:20px;border-radius:var(--radius-lg);background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow-xs)}
+.trust-card .ico{font-size:26px}.trust-card h3{font-size:15px;margin:10px 0 4px}.trust-card p{font-size:13px;color:var(--muted);margin:0;line-height:1.6}
+.final{margin-top:50px;border-radius:var(--radius-xl);padding:44px 34px;background:linear-gradient(115deg,#1552e6,#1f86fb 60%,#26b6e6);color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;box-shadow:0 24px 50px rgba(26,99,240,.30);position:relative;overflow:hidden}
+.final:before{content:"";position:absolute;width:420px;height:420px;right:-120px;top:-200px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.25),transparent 65%)}
+.final h2{color:#fff;font-size:clamp(22px,3vw,32px);margin:0 0 6px}.final p{margin:0;opacity:.92}
+.final .actions{display:flex;gap:10px;flex-wrap:wrap}
+.final .primary-btn{background:#fff;color:var(--blue);box-shadow:0 6px 0 -2px #c7d9fb,0 12px 26px rgba(0,0,0,.18)}
+.final .outline-btn{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.4);color:#fff;box-shadow:none}
+.landing-foot{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12.5px}
+@media(max-width:900px){.hero{grid-template-columns:1fr}.hero-stack{height:360px}.choice-grid,.trust{grid-template-columns:1fr 1fr}.steps{grid-template-columns:1fr 1fr}}
+@media(max-width:640px){.landing{padding:16px 14px 60px}.landing-top nav .outline-btn{display:none}.choice-grid,.trust,.steps{grid-template-columns:1fr}.hero-stack{height:300px}.hero-stack .c1{width:74%}.hero-stack .c2{width:60%}.hero-stack .c3{width:70%;right:0}.final{flex-direction:column;align-items:flex-start;padding:30px 22px}}
+</style>
 {% endblock %}
-
-
 {% block content %}
+<div class="landing">
+  {% if not session.get('user_id') %}
+  <div class="landing-top reveal">
+    <a class="brand" href="{{ url_for('home') }}"><span class="brand-icon">⌂</span><span>Smart<span>Serve</span></span></a>
+    <nav>
+      <button class="icon-btn" type="button" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><span id="themeIcon">☾</span></button>
+      <a class="outline-btn" href="{{ url_for('login') }}">Sign in</a>
+      <a class="primary-btn" href="{{ url_for('register') }}">Create account</a>
+    </nav>
+  </div>
+  {% endif %}
 
-<div class="home-page">
-
-
-    <!-- =====================================================
-         HERO
-         ===================================================== -->
-
-    <section class="home-hero">
-
-        <div class="home-badge">
-            <span>✦</span>
-            AI-POWERED LOCAL SERVICE PLATFORM
+  <section class="hero">
+    <div class="reveal">
+      <span class="eyebrow">✦ AI-assisted local service platform</span>
+      <h1>Solve problems.<br><span>Create opportunities.</span></h1>
+      <p>SmartServe connects people who need help with verified, skilled professionals nearby — with AI diagnosis, transparent pricing, live GPS tracking, secure payments and a 7-day workmanship warranty.</p>
+      <div class="hero-actions">
+        {% if session.get('user_id') %}
+          {% if session.get('role') == 'provider' %}<a class="primary-btn btn-lg" href="{{ url_for('provider_dashboard') }}">Open provider dashboard →</a>
+          {% elif session.get('role') == 'admin' %}<a class="primary-btn btn-lg" href="{{ url_for('admin_operations') }}">Open operations console →</a>
+          {% else %}<a class="primary-btn btn-lg" href="{{ url_for('request_service') }}">Book a service →</a><a class="outline-btn btn-lg" href="{{ url_for('customer_dashboard') }}">My dashboard</a>{% endif %}
+        {% else %}
+          <a class="primary-btn btn-lg" href="{{ url_for('register') }}?role=customer">I need help →</a>
+          <a class="outline-btn btn-lg" href="{{ url_for('register') }}?role=provider">Earn with my skills</a>
+        {% endif %}
+      </div>
+      <div class="hero-stats">
+        <div><strong>{{ counts.providers }}</strong><span>Verified providers</span></div>
+        <div><strong>{{ counts.completed }}</strong><span>Jobs completed</span></div>
+        <div><strong>{{ counts.reviews }}</strong><span>Customer reviews</span></div>
+        <div><strong>{{ services|length }}</strong><span>Service categories</span></div>
+      </div>
+    </div>
+    <div class="hero-visual reveal" aria-hidden="true">
+      <div class="hero-stack">
+        <div class="card c1 tilt">
+          <div class="row"><div class="avatar">A</div><div><strong>Arjun · Plumbing</strong><div class="muted">★ 4.9 · 2.1 km away · ETA 8 min</div></div><span class="status-pill">LIVE</span></div>
+          <div class="mini-map"><div class="route"></div><div class="pin a"></div><div class="pin b"></div></div>
         </div>
-
-
-        <h1>
-
-            Solve Problems.
-
-            <span>
-                Create Opportunities.
-            </span>
-
-        </h1>
-
-
-        <p class="home-subtitle">
-
-            Smart Serve connects people who need help
-            with skilled people who can provide it.
-
-            <br>
-
-            <strong>
-                Get problems solved. Use your skills.
-                Earn in your free time.
-            </strong>
-
-        </p>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         TWO MAIN OPTIONS
-         ===================================================== -->
-
-    <section class="choice-section">
-
-
-        <!-- USER -->
-
-        <div class="choice-card user-choice">
-
-            <div class="choice-top">
-
-                <div class="choice-icon">
-                    👤
-                </div>
-
-                <span class="choice-label">
-                    FOR USERS
-                </span>
-
-            </div>
-
-
-            <h2>
-                I NEED HELP
-            </h2>
-
-
-            <p>
-
-                Have a problem at home, with your
-                electronics, computer or other service?
-
-                Tell Smart Serve what happened and
-                we'll help you find the right solution.
-
-            </p>
-
-
-            <div class="choice-features">
-
-                <div>
-                    ✓ Describe your problem
-                </div>
-
-                <div>
-                    ✓ Get AI-assisted analysis
-                </div>
-
-                <div>
-                    ✓ See an estimated price
-                </div>
-
-                <div>
-                    ✓ Find suitable providers
-                </div>
-
-            </div>
-
-
-            <a href="{{ url_for('register') }}"
-               class="choice-button user-button">
-
-                Get Help
-
-                <span>→</span>
-
-            </a>
-
+        <div class="card c2 tilt">
+          <div class="eyebrow">AI diagnosis</div>
+          <strong style="display:block;margin:6px 0">Leaking kitchen tap</strong>
+          <div class="muted">Likely worn cartridge · Easy · Est. ₹250–₹450</div>
         </div>
-
-
-
-        <!-- PROVIDER -->
-
-        <div class="choice-card provider-choice">
-
-            <div class="choice-top">
-
-                <div class="choice-icon">
-                    🧑‍🔧
-                </div>
-
-                <span class="choice-label">
-                    FOR SKILLED PEOPLE
-                </span>
-
-            </div>
-
-
-            <h2>
-                EARN WITH YOUR SKILLS
-            </h2>
-
-
-            <p>
-
-                Have a skill you can use to help others?
-
-                Turn your free time, weekends and
-                practical experience into service
-                opportunities.
-
-            </p>
-
-
-            <div class="choice-features">
-
-                <div>
-                    ✓ Choose your skills
-                </div>
-
-                <div>
-                    ✓ Find suitable service requests
-                </div>
-
-                <div>
-                    ✓ Work during your free time
-                </div>
-
-                <div>
-                    ✓ Build experience and ratings
-                </div>
-
-            </div>
-
-
-            <button type="button"
-                    class="choice-button provider-button"
-                    onclick="showProviderMode()">
-
-                Start Earning
-
-                <span>→</span>
-
-            </button>
-
+        <div class="card c3 tilt">
+          <div class="row"><span style="font-size:24px">🛡️</span><div><strong>Payment secured</strong><div class="muted">Released after your verification · 7-day warranty</div></div></div>
         </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         PROVIDER MODE PANEL
-         ===================================================== -->
-
-    <section id="providerModePanel"
-             class="provider-mode-panel">
-
-
-        <div class="provider-mode-header">
-
-            <div>
-
-                <div class="home-badge small">
-                    🎓 STUDENT / PART-TIME OPPORTUNITY
-                </div>
-
-                <h2>
-                    Turn Your Skills Into Opportunities
-                </h2>
-
-                <p>
-
-                    Enable Student Mode to explore how
-                    Smart Serve can help students and
-                    skilled people find suitable work
-                    during weekends and free time.
-
-                </p>
-
-            </div>
-
-
-            <button type="button"
-                    class="student-toggle"
-                    onclick="toggleStudentModeFromHome()">
-
-                <span>
-                    🎓
-                </span>
-
-                Enable Student Mode
-
-                <strong id="homeStudentState">
-                    OFF
-                </strong>
-
-            </button>
-
-        </div>
-
-
-
-        <div class="provider-benefits">
-
-
-            <div class="benefit-card">
-
-                <div class="benefit-icon">
-                    🗓️
-                </div>
-
-                <h3>
-                    Flexible Work
-                </h3>
-
-                <p>
-                    Choose opportunities that fit
-                    your available time.
-                </p>
-
-            </div>
-
-
-            <div class="benefit-card">
-
-                <div class="benefit-icon">
-                    🛠️
-                </div>
-
-                <h3>
-                    Use Your Skills
-                </h3>
-
-                <p>
-                    Offer services based on what
-                    you already know.
-                </p>
-
-            </div>
-
-
-            <div class="benefit-card">
-
-                <div class="benefit-icon">
-                    ⭐
-                </div>
-
-                <h3>
-                    Build Experience
-                </h3>
-
-                <p>
-                    Complete services and build
-                    your provider profile.
-                </p>
-
-            </div>
-
-
-            <div class="benefit-card">
-
-                <div class="benefit-icon">
-                    ₹
-                </div>
-
-                <h3>
-                    Earn
-                </h3>
-
-                <p>
-                    Turn suitable service opportunities
-                    into additional income.
-                </p>
-
-            </div>
-
-        </div>
-
-
-        <div class="provider-cta">
-
-            <div>
-
-                <strong>
-                    Ready to use your skills?
-                </strong>
-
-                <span>
-                    Create your provider profile and
-                    start exploring opportunities.
-                </span>
-
-            </div>
-
-
-            <a href="{{ url_for('register') }}"
-               class="choice-button provider-button">
-
-                Become a Provider →
-
-            </a>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         USER WORKFLOW
-         ===================================================== -->
-
-    <section class="workflow-section">
-
-        <div class="section-heading">
-
-            <span>
-                FOR USERS
-            </span>
-
-            <h2>
-                Getting a problem solved is simple.
-            </h2>
-
-            <p>
-                Smart Serve guides you from the problem
-                to the right service provider.
-            </p>
-
-        </div>
-
-
-        <div class="workflow-grid">
-
-
-            <div class="workflow-card">
-
-                <div class="workflow-number">
-                    01
-                </div>
-
-                <div class="workflow-icon">
-                    🔧
-                </div>
-
-                <h3>
-                    Tell Us Your Problem
-                </h3>
-
-                <p>
-                    Select a service and explain
-                    what is happening.
-                </p>
-
-            </div>
-
-
-            <div class="workflow-line"></div>
-
-
-            <div class="workflow-card">
-
-                <div class="workflow-number">
-                    02
-                </div>
-
-                <div class="workflow-icon">
-                    🤖
-                </div>
-
-                <h3>
-                    Let AI Analyze
-                </h3>
-
-                <p>
-                    AI provides a preliminary problem
-                    analysis and price estimate.
-                </p>
-
-            </div>
-
-
-            <div class="workflow-line"></div>
-
-
-            <div class="workflow-card">
-
-                <div class="workflow-number">
-                    03
-                </div>
-
-                <div class="workflow-icon">
-                    🔍
-                </div>
-
-                <h3>
-                    Find a Provider
-                </h3>
-
-                <p>
-                    View providers suitable for
-                    your requested service.
-                </p>
-
-            </div>
-
-
-            <div class="workflow-line"></div>
-
-
-            <div class="workflow-card">
-
-                <div class="workflow-number">
-                    04
-                </div>
-
-                <div class="workflow-icon">
-                    ✓
-                </div>
-
-                <h3>
-                    Resolve the Issue
-                </h3>
-
-                <p>
-                    Select a provider and get
-                    your problem resolved.
-                </p>
-
-            </div>
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         SERVICES
-         ===================================================== -->
-
-    <section class="home-services">
-
-        <div class="section-heading">
-
-            <span>
-                SERVICES
-            </span>
-
-            <h2>
-                Help for everyday problems.
-            </h2>
-
-            <p>
-                Choose from common services available
-                through Smart Serve.
-            </p>
-
-        </div>
-
-
-        <div class="service-showcase">
-
-
-            <div class="showcase-service"
-                onclick="openService('Plumbing')">
-
-                🔧
-
-                <span>
-                    Plumbing
-                </span>
-
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Electrical')">
-
-                ⚡
-
-                <span>
-                    Electrical
-                </span>
-
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Carpentry')">
-
-                🪚
-
-                <span>
-                    Carpentry
-                </span>
-
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Appliance Repair')">
-
-                🔌
-
-                <span>
-                    Appliance Repair
-                </span>
-
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Cleaning')">
-
-                🧹
-                <span>Cleaning</span>
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Mobile Repair')">
-
-                📱
-                <span>Mobile Repair</span>
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Laptop Repair')">
-
-                💻
-                <span>Laptop Repair</span>
-            </div>
-
-
-            <div class="showcase-service"
-                onclick="openService('Basic IT Support')">
-
-                🖥️
-                <span>Basic IT Support</span>
-            </div>
-
-
-        </div>
-
-    </section>
-
-
-
-    <!-- =====================================================
-         FINAL CTA
-         ===================================================== -->
-
-    <section class="final-cta">
-
-        <div>
-
-            <span class="final-icon">
-                ✦
-            </span>
-
-            <h2>
-                One platform.
-                <span>Two opportunities.</span>
-            </h2>
-
-            <p>
-                Get the help you need or use what
-                you know to help someone else.
-            </p>
-
-        </div>
-
-
-        <div class="final-actions">
-
-            <a href="{{ url_for('register') }}"
-               class="choice-button user-button">
-
-                I Need Help →
-
-            </a>
-
-
-            <button type="button"
-                    class="choice-button provider-button"
-                    onclick="showProviderMode()">
-
-                Earn With Your Skills →
-
-            </button>
-
-        </div>
-
-    </section>
-
-
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading reveal"><span class="eyebrow">Two ways to use SmartServe</span><h2>Get help, or offer it.</h2><p>One account type for customers, one for service providers. Both get live tracking, chat and safety tools.</p></div>
+    <div class="choice-grid">
+      <article class="choice-card reveal">
+        <div class="choice-icon">👤</div>
+        <h2>I need help</h2>
+        <p class="muted" style="font-size:14px">Describe the problem in your own words or upload a photo. SmartServe suggests the right service and matches you with available professionals in your PIN code.</p>
+        <ul><li>AI problem analysis and price estimate</li><li>Choose your provider or auto-match</li><li>Live GPS tracking and in-app chat</li><li>Verify the work before you pay</li></ul>
+        <div><a class="primary-btn" href="{{ url_for('register') }}?role=customer">Get help →</a></div>
+      </article>
+      <article class="choice-card provider reveal">
+        <div class="choice-icon">🧑‍🔧</div>
+        <h2>Earn with your skills</h2>
+        <p class="muted" style="font-size:14px">Students, part-timers and professionals: pick the services you offer, go online when you are free and receive nearby requests in real time.</p>
+        <ul><li>Select skills from grouped categories</li><li>Build a portfolio, badges and reviews</li><li>Negotiate a fair price in-app</li><li>Track earnings and payouts</li></ul>
+        <div><a class="success-btn primary-btn" style="background:linear-gradient(180deg,#2fc484,var(--green));box-shadow:0 6px 0 -2px #0b7a4d,0 10px 22px rgba(18,168,107,.30)" href="{{ url_for('register') }}?role=provider">Become a provider →</a></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading reveal"><span class="eyebrow">How it works</span><h2>From problem to fixed, in four steps.</h2></div>
+    <div class="steps">
+      <div class="step-card reveal"><div class="num">STEP 01</div><div class="ico">📝</div><h3>Describe the issue</h3><p>Pick a service or let AI classify your description and photo.</p></div>
+      <div class="step-card reveal"><div class="num">STEP 02</div><div class="ico">🤝</div><h3>Match & agree a price</h3><p>See nearby providers with trust scores, then negotiate in-app.</p></div>
+      <div class="step-card reveal"><div class="num">STEP 03</div><div class="ico">📍</div><h3>Track the arrival</h3><p>Follow your provider live on the map with a road-based ETA.</p></div>
+      <div class="step-card reveal"><div class="num">STEP 04</div><div class="ico">✅</div><h3>Verify & pay</h3><p>Review completion photos, pay securely and get a 7-day warranty.</p></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading reveal"><span class="eyebrow">Services</span><h2>Help for everyday problems.</h2></div>
+    <div class="landing-services">
+      {% for s in services %}
+      <a class="reveal" href="{{ url_for('request_service') }}?service_id={{ s['id'] }}"><span class="ico">{{ s['icon'] or '🛠️' }}</span><strong>{{ s['name'] }}</strong><small>{{ s['category'] }}</small></a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-heading reveal"><span class="eyebrow">Built for trust</span><h2>Safety is part of every booking.</h2></div>
+    <div class="trust">
+      <div class="trust-card reveal"><div class="ico">🪪</div><h3>Verified identities</h3><p>Providers submit ID documents that are reviewed by the operations team before the Verified badge appears.</p></div>
+      <div class="trust-card reveal"><div class="ico">🆘</div><h3>SOS & trusted contacts</h3><p>One tap sends your live location and service details to operations, with a direct 112 option.</p></div>
+      <div class="trust-card reveal"><div class="ico">🔐</div><h3>Verified completion</h3><p>Providers upload proof of work, you confirm it, and only then does payment go through.</p></div>
+      <div class="trust-card reveal"><div class="ico">⚖️</div><h3>Dispute centre</h3><p>Raise an issue on any service and track its resolution from your dashboard.</p></div>
+    </div>
+  </section>
+
+  <section class="final reveal">
+    <div><h2>One platform. Two opportunities.</h2><p>Get the help you need — or use what you know to help someone nearby.</p></div>
+    <div class="actions">
+      {% if session.get('user_id') %}
+        <a class="primary-btn" href="{{ url_for('provider_dashboard') if session.get('role')=='provider' else url_for('customer_dashboard') }}">Go to my dashboard →</a>
+      {% else %}
+        <a class="primary-btn" href="{{ url_for('register') }}?role=customer">I need help →</a>
+        <a class="outline-btn" href="{{ url_for('register') }}?role=provider">Earn with my skills →</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <footer class="landing-foot"><span>© SmartServe · Local services, done right.</span><span><a href="{{ url_for('login') }}">Sign in</a> · <a href="{{ url_for('register') }}">Register</a></span></footer>
 </div>
-
-
-
-<script>
-
-function showProviderMode() {
-
-    var panel =
-        document.getElementById(
-            "providerModePanel"
-        );
-
-    if (!panel) {
-        return;
-    }
-
-    panel.classList.add(
-        "provider-panel-visible"
-    );
-
-    panel.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-    });
-}
-
-
-function toggleStudentModeFromHome() {
-
-    var enabled =
-        document.body.classList.toggle(
-            "student-mode"
-        );
-
-    localStorage.setItem(
-        "smartServeStudentMode",
-        enabled ? "on" : "off"
-    );
-
-    var state =
-        document.getElementById(
-            "homeStudentState"
-        );
-
-    if (state) {
-        state.textContent =
-            enabled ? "ON" : "OFF";
-    }
-
-    var globalState =
-        document.getElementById(
-            "studentModeState"
-        );
-
-    if (globalState) {
-        globalState.textContent =
-            enabled ? "ON" : "OFF";
-    }
-
-    var panel =
-        document.getElementById(
-            "providerModePanel"
-        );
-
-    if (enabled && panel) {
-        panel.classList.add(
-            "student-mode-active"
-        );
-    }
-    else if (panel) {
-        panel.classList.remove(
-            "student-mode-active"
-        );
-    }
-}
-
-
-/* =====================================================
-   SERVICE CLICK
-   ===================================================== */
-
-function openService(serviceName) {
-
-    var loginPage = "/login";
-
-    var supportPortal =
-        "/customer/dashboard";
-
-
-    /*
-     * Check whether the current page
-     * contains the Logout link.
-     */
-
-    var logoutLink =
-        document.querySelector(
-            'a[href*="/logout"]'
-        );
-
-
-    var isLoggedIn =
-        logoutLink !== null;
-
-
-    /*
-     * USER NOT LOGGED IN
-     */
-
-    if (!isLoggedIn) {
-
-        window.location.href =
-            loginPage;
-
-        return;
-    }
-
-
-    /*
-     * USER ALREADY LOGGED IN
-     */
-
-    localStorage.setItem(
-        "smartServeSelectedService",
-        serviceName
-    );
-
-
-    window.location.href =
-        supportPortal;
-
-}
-
-</script>
-
 {% endblock %}

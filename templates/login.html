@@ -1,21 +1,27 @@
 {% extends "base.html" %}
-{% block title %}SmartServe | Sign In{% endblock %}
+{% block title %}SmartServe · Sign in{% endblock %}
 {% block content %}
 <div class="auth-page">
-  <div class="auth-card">
-    <div class="eyebrow">✓ TRUSTED SERVICE MARKETPLACE</div>
+  <div class="auth-card reveal">
+    <div class="row space-between" style="margin-bottom:10px">
+      <a class="brand" href="{{ url_for('home') }}"><span class="brand-icon">⌂</span><span>Smart<span>Serve</span></span></a>
+      <button class="icon-btn" type="button" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><span id="themeIcon">☾</span></button>
+    </div>
+    <span class="eyebrow">Trusted local services</span>
     <h1>Welcome back 👋</h1>
     <p>Sign in to book verified professionals, track services in real time and manage secure payments.</p>
     <a class="google-btn" href="{{ url_for('google_login') }}"><span style="font-size:19px;color:#4285f4;font-weight:900">G</span> Continue with Google</a>
-    <div class="muted" style="text-align:center;margin-top:9px;font-size:9px">🔐 Secure Google OAuth session{% if not google_oauth_enabled %} · Add Google OAuth credentials to enable{% endif %}</div>
+    {% if not google_oauth_enabled %}<div class="muted" style="text-align:center;margin-top:8px;font-size:11.5px">Google sign-in needs OAuth credentials in <code>.env</code>. Email sign-in works without them.</div>{% endif %}
     <div class="divider">or use email</div>
-    <form method="post">
-      <label style="font-size:10px;font-weight:800">Email</label><input class="input" type="email" name="email" required autocomplete="email">
-      <label style="font-size:10px;font-weight:800">Password</label><input class="input" type="password" name="password" required autocomplete="current-password">
-      <button class="primary-btn" style="width:100%">Sign in →</button>
+    <form method="post" data-no-busy onsubmit="const b=this.querySelector('button');b.disabled=true;b.innerHTML='<span class=spinner></span> Signing in…'">
+      <label class="field"><span style="font-size:12px;font-weight:800;display:block;margin:6px 0 4px">Email</span><input class="input" type="email" name="email" required autocomplete="email" placeholder="you@example.com" autofocus></label>
+      <label class="field"><span style="font-size:12px;font-weight:800;display:block;margin:6px 0 4px">Password</span>
+        <span style="position:relative;display:block"><input class="input" id="loginPassword" type="password" name="password" required autocomplete="current-password" placeholder="Your password" style="padding-right:46px"><button type="button" onclick="const i=document.getElementById('loginPassword');const s=i.type==='password';i.type=s?'text':'password';this.textContent=s?'🙈':'👁'" aria-label="Show password" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);margin-top:-3px;border:0;background:transparent;cursor:pointer;font-size:16px;color:var(--muted)">👁</button></span>
+      </label>
+      <button class="primary-btn btn-block btn-lg" type="submit">Sign in →</button>
     </form>
-    <p style="text-align:center;margin-bottom:0">New to SmartServe? <a href="{{ url_for('register') }}" style="color:var(--blue);font-weight:800">Create account</a></p>
-    <div style="display:flex;justify-content:space-between;margin-top:22px;color:var(--muted);font-size:9px"><span>🔒 Secure session</span><span>📍 Live tracking</span><span>💳 Secure payments</span></div>
+    <p style="text-align:center;margin:16px 0 0">New to SmartServe? <a href="{{ url_for('register') }}" style="color:var(--blue);font-weight:800">Create an account</a></p>
+    <div class="row" style="justify-content:space-between;margin-top:22px;color:var(--muted);font-size:11.5px"><span>🔒 Secure session</span><span>📍 Live tracking</span><span>💳 Secure payments</span></div>
   </div>
 </div>
 {% endblock %}

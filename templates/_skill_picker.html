@@ -1,0 +1,51 @@
+{# Grouped, multi-select skill picker.
+   Usage: {% include '_skill_picker.html' %} with `service_groups` and optional `selected_service_ids` in context.
+   Emits checkboxes named service_ids[] plus a hidden `skills` field (comma-separated names, kept for legacy readers). #}
+{% set selected_ids = selected_service_ids or [] %}
+<div class="skill-picker" id="skillPicker" data-min="{{ skill_min|default(1) }}">
+  <div class="skill-summary">
+    <span><strong id="skillCount">{{ selected_ids|length }}</strong> selected · choose every service you can deliver</span>
+    <span class="row" style="gap:6px">
+      <button type="button" class="ghost-btn btn-sm" onclick="skillPickerSelectAll(true)">Select all</button>
+      <button type="button" class="ghost-btn btn-sm" onclick="skillPickerSelectAll(false)">Clear</button>
+    </span>
+  </div>
+  <div class="skill-groups">
+    {% for group in service_groups %}
+    <fieldset class="skill-group" style="border:1px solid var(--line);margin:0">
+      <legend class="sr-only">{{ group.name }}</legend>
+      <div class="skill-group-head">
+        <h4>{{ group.name }}</h4>
+        <span class="count" data-group-count>0 / {{ group.services|length }}</span>
+      </div>
+      <div class="skill-grid">
+        {% for s in group.services %}
+        <label class="skill-card">
+          <input type="checkbox" name="service_ids" value="{{ s.id }}" data-name="{{ s.name }}" {% if s.id in selected_ids %}checked{% endif %} onchange="skillPickerChanged()">
+          <span class="skill-body">
+            <span class="skill-icon" aria-hidden="true">{{ s.icon or '🛠️' }}</span>
+            <span><strong>{{ s.name }}</strong><span>{{ s.description or 'Local service' }}</span></span>
+            <span class="tick" aria-hidden="true"></span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+  </div>
+  <input type="hidden" name="skills" id="skillsHidden" value="">
+  <div class="error-text" id="skillError" style="display:none;color:var(--red);font-size:12px;font-weight:700;margin:4px 0 8px">Select at least one service you offer.</div>
+</div>
+<script>
+function skillPickerChanged(){
+  var picker=document.getElementById('skillPicker'); if(!picker) return;
+  var checked=[].slice.call(picker.querySelectorAll('input[name="service_ids"]:checked'));
+  var count=document.getElementById('skillCount'); if(count) count.textContent=checked.length;
+  var hidden=document.getElementById('skillsHidden'); if(hidden) hidden.value=checked.map(function(c){return c.dataset.name;}).join(', ');
+  picker.querySelectorAll('.skill-group').forEach(function(g){var all=g.querySelectorAll('input[name="service_ids"]'),sel=g.querySelectorAll('input[name="service_ids"]:checked');var c=g.querySelector('[data-group-count]');if(c)c.textContent=sel.length+' / '+all.length;});
+  var err=document.getElementById('skillError'); if(err&&checked.length) err.style.display='none';
+}
+function skillPickerSelectAll(on){document.querySelectorAll('#skillPicker input[name="service_ids"]').forEach(function(c){c.checked=!!on;});skillPickerChanged();}
+function skillPickerValidate(){var picker=document.getElementById('skillPicker');if(!picker)return true;var min=Number(picker.dataset.min||1);var n=picker.querySelectorAll('input[name="service_ids"]:checked').length;var err=document.getElementById('skillError');if(n<min){if(err)err.style.display='block';picker.scrollIntoView({behavior:'smooth',block:'center'});return false;}return true;}
+document.addEventListener('DOMContentLoaded',skillPickerChanged);
+</script>

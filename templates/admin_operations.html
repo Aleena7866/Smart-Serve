@@ -1,1 +1,89 @@
-{% extends "base.html" %}{% block title %}SmartServe Operations{% endblock %}{% block content %}<div class="page"><div class="greeting"><div><div class="eyebrow">OPERATIONS CENTER</div><h1>SmartServe Control Room</h1><p class="muted">Live marketplace health, disputes, alerts and fraud signals.</p></div><a class="outline-btn" href="{{ url_for('fraud_scan') }}">Run fraud scan</a></div><div class="provider-info-grid">{% for k,v in stats.items() %}<div class="provider-info"><strong>{{ v }}</strong><span>{{ k.replace('_',' ')|title }}</span></div>{% endfor %}</div><section class="section-head"><h2>Alerts</h2></section>{% for a in alerts %}<div class="form-card" style="margin-bottom:8px"><strong>{{ a['severity'] }} · {{ a['title'] }}</strong><p class="muted">{{ a['message'] }}</p></div>{% else %}<div class="form-card"><p class="muted">No open alerts.</p></div>{% endfor %}<section class="section-head"><h2>Disputes</h2></section>{% for d in disputes %}<div class="form-card" style="margin-bottom:8px"><strong>Request #{{ d['request_id'] }} · {{ d['reason'] }}</strong><p>{{ d['description'] or '' }}</p><span class="chip">{{ d['status'] }}</span></div>{% else %}<div class="form-card"><p class="muted">No open disputes.</p></div>{% endfor %}<section class="section-head"><h2>Fraud signals</h2></section>{% for f in fraud %}<div class="form-card" style="margin-bottom:8px"><strong>{{ f['severity'] }} · {{ f['signal_type'] }}</strong><p class="muted">{{ f['details'] }}</p></div>{% else %}<div class="form-card"><p class="muted">No open fraud signals.</p></div>{% endfor %}</div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}SmartServe · Operations console{% endblock %}
+{% block head %}
+<style>
+.ops-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:18px 0}
+.ops-stat{padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);box-shadow:var(--shadow-xs)}
+.ops-stat strong{display:block;font-size:24px;letter-spacing:-.02em}.ops-stat span{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.ops-stat.alert strong{color:var(--red)}
+.ops-row{border:1px solid var(--line);border-radius:18px;padding:14px 16px;background:var(--card);margin-bottom:10px;display:grid;gap:8px;box-shadow:var(--shadow-xs)}
+.ops-row.sos{border-color:color-mix(in srgb,var(--red) 45%,var(--line));background:linear-gradient(180deg,var(--card),var(--red-soft))}
+.ops-row .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.ops-row .meta{font-size:12.5px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.ops-row form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ops-row form .input{flex:1;min-width:220px}
+.sev{font-size:11px;font-weight:800;padding:3px 8px;border-radius:999px;background:var(--yellow-soft);color:#9a6300}
+.sev.HIGH,.sev.CRITICAL{background:var(--red-soft);color:var(--red)}.sev.LOW{background:var(--blue-soft);color:var(--blue)}
+.ops-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.ops-two{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page" style="max-width:1180px">
+  <div class="greeting reveal"><div><span class="eyebrow">Operations console</span><h1>SmartServe control room</h1><p class="muted">Live supply, active services, SOS alerts, disputes, identity checks and fraud signals.</p></div><div class="row"><a class="outline-btn" href="{{ url_for('fraud_scan') }}">🧠 Run fraud scan</a><button class="outline-btn" onclick="location.reload()">↻ Refresh</button></div></div>
+
+  <div class="ops-stats reveal">
+    <div class="ops-stat"><strong>{{ stats.users }}</strong><span>Users</span></div>
+    <div class="ops-stat"><strong>{{ stats.online_providers }}</strong><span>Providers online</span></div>
+    <div class="ops-stat"><strong>{{ stats.active_services }}</strong><span>Active services</span></div>
+    <div class="ops-stat {{ 'alert' if stats.open_sos }}"><strong>{{ stats.open_sos }}</strong><span>Open SOS</span></div>
+    <div class="ops-stat {{ 'alert' if stats.open_disputes }}"><strong>{{ stats.open_disputes }}</strong><span>Open disputes</span></div>
+    <div class="ops-stat"><strong>{{ stats.open_fraud }}</strong><span>Fraud signals</span></div>
+    <div class="ops-stat"><strong>{{ stats.alerts }}</strong><span>Open alerts</span></div>
+  </div>
+
+  <section class="reveal" id="sos">
+    <div class="section-head"><div><span class="eyebrow">Priority</span><h2>🆘 Open SOS alerts</h2></div></div>
+    {% for e in sos_events %}
+    <div class="ops-row sos">
+      <div class="top"><div><strong>SOS #{{ e['id'] }} · {{ e['user_name'] }} ({{ e['user_role'] }})</strong><div class="meta"><span>Service #{{ e['request_id'] }} · {{ e['service_name'] }} · {{ e['service_status'].replace('_',' ') }}</span><span>{{ e['created_at'] }}</span></div></div><span class="sev CRITICAL">OPEN</span></div>
+      {% if e['message'] %}<div>“{{ e['message'] }}”</div>{% endif %}
+      <div class="meta">
+        <a href="tel:{{ e['user_phone'] }}" style="color:var(--blue);font-weight:800">📞 Call {{ e['user_name'] }} ({{ e['user_phone'] }})</a>
+        {% if e['trusted_contact_phone'] %}<a href="tel:{{ e['trusted_contact_phone'] }}" style="color:var(--blue);font-weight:800">📞 Trusted contact {{ e['trusted_contact_name'] }} ({{ e['trusted_contact_phone'] }})</a>{% else %}<span>No trusted contact on file</span>{% endif %}
+        {% if e['latitude'] is not none %}<a href="https://www.openstreetmap.org/?mlat={{ e['latitude'] }}&mlon={{ e['longitude'] }}#map=17/{{ e['latitude'] }}/{{ e['longitude'] }}" target="_blank" rel="noopener" style="color:var(--blue);font-weight:800">📍 {{ '%.5f'|format(e['latitude']) }}, {{ '%.5f'|format(e['longitude']) }}</a>{% else %}<span>No location captured</span>{% endif %}
+      </div>
+      <form method="post" action="{{ url_for('admin_sos_acknowledge',sos_id=e['id']) }}"><button class="primary-btn btn-sm" data-busy-text="Saving…">✓ Acknowledge & notify user</button></form>
+    </div>
+    {% else %}<div class="empty-state">No open SOS alerts. 🎉</div>{% endfor %}
+  </section>
+
+  <div class="ops-two">
+    <section class="reveal" id="disputes">
+      <div class="section-head"><div><span class="eyebrow">Resolution</span><h2>⚖️ Open disputes</h2></div></div>
+      {% for d in disputes %}
+      <div class="ops-row">
+        <div class="top"><div><strong>#{{ d['id'] }} · {{ d['reason'] }}</strong><div class="meta"><span>Service #{{ d['request_id'] }} · {{ d['service_name'] }}</span><span>by {{ d['opened_by_name'] }} ({{ d['opened_by_role'] }})</span><span>{{ d['created_at'] }}</span></div></div><span class="sev">{{ d['status'] }}</span></div>
+        <div style="font-size:13.5px">{{ d['description'] or 'No description provided.' }}</div>
+        <form method="post" action="{{ url_for('admin_dispute_action',dispute_id=d['id'],action='resolve') }}" id="disp{{ d['id'] }}"><input class="input" name="resolution" maxlength="500" placeholder="Resolution note sent to the user (e.g. Refund of ₹300 approved)"><button class="primary-btn btn-sm" data-busy-text="Saving…">Resolve</button><button class="outline-btn btn-sm" type="submit" formaction="{{ url_for('admin_dispute_action',dispute_id=d['id'],action='reject') }}">Reject</button></form>
+      </div>
+      {% else %}<div class="empty-state">No open disputes.</div>{% endfor %}
+    </section>
+
+    <section class="reveal" id="kyc">
+      <div class="section-head"><div><span class="eyebrow">Trust</span><h2>🪪 Identity verification queue</h2></div></div>
+      {% for k in pending_kyc %}
+      <div class="ops-row"><div class="top"><div><strong>{{ k['name'] }}</strong><div class="meta"><span>Provider #{{ k['id'] }} · document submitted</span></div></div><span class="sev LOW">{{ k['ekyc_status'] }}</span></div>
+        <div class="row"><a class="outline-btn btn-sm" href="{{ url_for('provider_profile',provider_id=k['id']) }}" target="_blank" rel="noopener">View profile</a><form method="post" action="{{ url_for('admin_verify_kyc',provider_id=k['id']) }}"><button class="primary-btn btn-sm">✓ Verify identity</button></form><form method="post" action="{{ url_for('admin_reject_kyc',provider_id=k['id']) }}"><button class="danger-btn btn-sm">Reject</button></form></div></div>
+      {% else %}<div class="empty-state">No identity documents waiting for review.</div>{% endfor %}
+
+      <div class="section-head"><div><span class="eyebrow">Signals</span><h2>🔔 Alerts</h2></div></div>
+      {% for a in alerts %}
+      <div class="ops-row"><div class="top"><div><strong>{{ a['title'] }}</strong><div class="meta">{% if a['user_name'] %}<span>{{ a['user_name'] }}</span>{% endif %}{% if a['request_id'] %}<span>Service #{{ a['request_id'] }}</span>{% endif %}<span>{{ a['created_at'] }}</span></div></div><span class="sev {{ a['severity'] }}">{{ a['severity'] }}</span></div><div class="muted" style="font-size:13px">{{ a['message'] }}</div><form method="post" action="{{ url_for('admin_alert_resolve',alert_id=a['id']) }}"><button class="outline-btn btn-sm">Mark resolved</button></form></div>
+      {% else %}<div class="empty-state">No open alerts.</div>{% endfor %}
+    </section>
+  </div>
+
+  <section class="reveal" id="fraud">
+    <div class="section-head"><div><span class="eyebrow">Integrity</span><h2>🧠 Fraud signals</h2></div></div>
+    {% for f in fraud %}
+    <div class="ops-row"><div class="top"><div><strong>{{ f['signal_type'].replace('_',' ')|title }}</strong><div class="meta">{% if f['user_id'] %}<span>User #{{ f['user_id'] }}</span>{% endif %}{% if f['request_id'] %}<span>Service #{{ f['request_id'] }}</span>{% endif %}<span>{{ f['created_at'] }}</span></div></div><span class="sev {{ f['severity'] }}">{{ f['severity'] }}</span></div><div class="muted" style="font-size:13px">{{ f['details'] }}</div></div>
+    {% else %}<div class="empty-state">No open fraud signals. Run a scan to re-check.</div>{% endfor %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded',function(){function bind(){if(!window.smartSocket)return setTimeout(bind,400);window.smartSocket.on('sos_alert',function(d){showToast('🆘 New SOS on service #'+(d.request_id||'')+' — refreshing…','error',6000);setTimeout(function(){location.reload();},1500);});window.smartSocket.on('dispute_opened',function(d){showToast('⚖️ New dispute #'+(d.dispute_id||'')+' opened.','info');});}bind();});
+</script>
+{% endblock %}

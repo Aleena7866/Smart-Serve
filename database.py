@@ -190,6 +190,13 @@ def init_database():
 
 
     # =====================================================
+    # SERVICE CATEGORIES (grouped skill selection)
+    # =====================================================
+    add_column_if_missing(connection, "services", "category", "TEXT")
+    add_column_if_missing(connection, "services", "icon", "TEXT")
+    add_column_if_missing(connection, "services", "sort_order", "INTEGER DEFAULT 100")
+
+    # =====================================================
     # PROVIDERS
     # =====================================================
 
@@ -434,94 +441,34 @@ def init_database():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_request_created ON messages(request_id, created_at)")
 
     # =====================================================
-    # DEFAULT SERVICES
+    # DEFAULT SERVICES (grouped into categories for a structured skill picker)
     # =====================================================
 
     services = [
-
-        (
-            "Plumbing",
-            "Pipe, tap and water related services"
-        ),
-
-        (
-            "Electrical",
-            "Electrical repair and installation"
-        ),
-
-        (
-            "Carpentry",
-            "Furniture and wood related services"
-        ),
-
-        (
-            "Appliance Repair",
-            "Repair home appliances"
-        ),
-
-        (
-            "Cleaning",
-            "Home and office cleaning"
-        ),
-
-        (
-            "Mobile Repair",
-            "Mobile phone repair"
-        ),
-
-        (
-            "Laptop Repair",
-            "Laptop and computer repair"
-        ),
-
-        (
-            "Basic IT Support",
-            "Basic computer and software support"
-        ),
-        (
-            "Delivery & Errands",
-            "Local pickup, drop-off and anything-from-nearby-store delivery"
-        )
-
+        # (name, description, category, icon, sort_order)
+        ("Plumbing", "Taps, pipes, leaks, drains and bathroom fittings", "Home Repair & Maintenance", "🔧", 10),
+        ("Electrical", "Wiring, switches, fans, lights and power issues", "Home Repair & Maintenance", "⚡", 20),
+        ("Carpentry", "Furniture, doors, shelves and woodwork", "Home Repair & Maintenance", "🔨", 30),
+        ("Appliance Repair", "AC, refrigerator, washing machine and kitchen appliances", "Home Repair & Maintenance", "🔌", 40),
+        ("Cleaning", "Home, kitchen, bathroom and office cleaning", "Cleaning & Household", "🧹", 50),
+        ("Mobile Repair", "Screen, battery, charging and software issues", "Electronics & IT", "📱", 60),
+        ("Laptop Repair", "Laptop and desktop hardware repair", "Electronics & IT", "💻", 70),
+        ("Basic IT Support", "Wi-Fi, printers, software setup and troubleshooting", "Electronics & IT", "🖥️", 80),
+        ("Delivery & Errands", "Local pickup, drop-off and store runs", "Delivery & Errands", "🛵", 90),
     ]
 
-
-    # =====================================================
-    # INSERT DEFAULT SERVICES
-    # =====================================================
-    #
-    # Do NOT blindly insert the services again.
-    #
-    # We check whether the service already exists.
-    # This helps prevent new duplicate services.
-    #
-    # =====================================================
-
-    for service_name, service_description in services:
-
+    for service_name, service_description, category, icon, sort_order in services:
         cursor.execute("""
-            INSERT INTO services
-            (
-                name,
-                description
-            )
-
-            SELECT ?, ?
-
-            WHERE NOT EXISTS (
-
-                SELECT 1
-
-                FROM services
-
-                WHERE LOWER(name) = LOWER(?)
-
-            )
-        """, (
-            service_name,
-            service_description,
-            service_name
-        ))
+            INSERT INTO services (name, description, category, icon, sort_order)
+            SELECT ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (SELECT 1 FROM services WHERE LOWER(name) = LOWER(?))
+        """, (service_name, service_description, category, icon, sort_order, service_name))
+        # Back-fill category metadata for rows created by earlier SmartServe versions.
+        cursor.execute("""
+            UPDATE services SET category=?, icon=?, sort_order=?, description=COALESCE(NULLIF(TRIM(description),''), ?)
+            WHERE LOWER(name)=LOWER(?) AND (category IS NULL OR TRIM(category)='')
+        """, (category, icon, sort_order, service_description, service_name))
+    cursor.execute("UPDATE services SET category='Other Services' WHERE category IS NULL OR TRIM(category)=''")
 
 
     # Keep the normalized provider service catalog in sync for existing accounts
@@ -881,6 +828,55 @@ def init_database():
             FOREIGN KEY(provider_id) REFERENCES providers(id)
         )
     """)
+    # =====================================================
+    # SAFETY: SOS EVENTS (dedicated audit table, linked to admin alerts)
+    # =====================================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sos_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT,
+            latitude REAL,
+            longitude REAL,
+            message TEXT,
+            trusted_contact_name TEXT,
+            trusted_contact_phone TEXT,
+            status TEXT DEFAULT 'OPEN',
+            acknowledged_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(request_id) REFERENCES service_requests(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sos_status ON sos_events(status,created_at DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sos_user ON sos_events(user_id,created_at DESC)")
+
+    # =====================================================
+    # LIVE TRACKING: location history per service request
+    # =====================================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS location_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            request_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            accuracy REAL,
+            heading REAL,
+            speed REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(request_id) REFERENCES service_requests(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_location_updates_request ON location_updates(request_id,created_at DESC)")
+    add_column_if_missing(connection, "users", "location_heading", "REAL")
+    add_column_if_missing(connection, "users", "location_speed", "REAL")
+    add_column_if_missing(connection, "disputes", "resolved_at", "TIMESTAMP")
+    add_column_if_missing(connection, "admin_alerts", "resolved_at", "TIMESTAMP")
+
     for idx in [
         "CREATE INDEX IF NOT EXISTS idx_portfolio_provider ON portfolio_items(provider_id,created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_favorites_customer ON favorite_providers(customer_id)",

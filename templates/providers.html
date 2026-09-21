@@ -8,7 +8,7 @@
   {% for p in providers %}
     <article class="provider-choice">
       <div class="provider-head">
-        {% if p['profile_photo_path'] %}<img class="provider-photo" src="{{ url_for('static',filename=p['profile_photo_path']) }}" alt="{{ p['name'] }}">{% else %}<div class="provider-photo placeholder">{{ p['name'][:1]|upper }}</div>{% endif %}
+        {% set photo = media_url(p['profile_photo_path']) %}{% if photo %}<img class="provider-photo" src="{{ photo }}" alt="{{ p['name'] }}">{% else %}<div class="provider-photo placeholder">{{ p['name'][:1]|upper }}</div>{% endif %}
         <div class="provider-main"><h3>{{ p['name'] }}</h3><div class="provider-meta"><span class="availability-dot">● Available now</span><span>★ {{ '%.1f'|format(p['rating']) }} ({{ p['review_count'] }})</span></div><div class="provider-meta">{% if p['distance_km'] is not none %}📍 {{ p['distance_km'] }} km{% else %}📍 Same PIN region{% endif %} · {% if p['eta_minutes'] %}~{{ p['eta_minutes'] }} min{% endif %}</div></div>
         <div class="trust-badge"><strong>{{ p['trust_score']|round(0)|int }}</strong><span>Trust score</span></div>
       </div>
@@ -21,6 +21,6 @@
   </div>
 </div>
 <script>
-async function selectProvider(id,name){if(!confirm(`Select ${name} for this service?`))return;try{const r=await fetch(`/api/providers/select/{{ service_request['id'] }}/${id}`,{method:'POST'});const d=await r.json();if(!r.ok||!d.success)throw Error(d.message||'Provider is no longer available.');alert(d.message);location.href='{{ url_for('customer_dashboard') }}#bookings';}catch(e){alert(e.message);location.reload();}}
+async function selectProvider(id,name){if(!(await uiConfirm({title:`Select ${name}?`,message:"They will be notified and can accept your request.",okText:"Select provider"})))return;try{const r=await fetch(`/api/providers/select/{{ service_request['id'] }}/${id}`,{method:'POST'});const d=await r.json();if(!r.ok||!d.success)throw Error(d.message||'Provider is no longer available.');alert(d.message);location.href='{{ url_for('customer_dashboard') }}#bookings';}catch(e){alert(e.message);location.reload();}}
 </script>
 {% endblock %}

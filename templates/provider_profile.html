@@ -1,20 +1,88 @@
 {% extends "base.html" %}
-{% block title %}{{ provider['name'] }} | SmartServe{% endblock %}
+{% block title %}{{ provider['name'] }} · SmartServe{% endblock %}
+{% block head %}
+<style>
+.profile-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.trust-ring{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--blue) calc(var(--v)*1%),var(--card3) 0);flex:none}
+.trust-ring span{width:62px;height:62px;border-radius:50%;background:var(--card);display:grid;place-items:center;font-weight:800;font-size:18px;letter-spacing:-.02em}
+.trust-ring small{font-size:9px;color:var(--muted);display:block;text-align:center;font-weight:700}
+.stats-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}
+.lightbox{position:fixed;inset:0;background:rgba(3,9,20,.85);display:none;place-items:center;z-index:400;padding:20px;cursor:zoom-out}
+.lightbox.open{display:grid;animation:fadeIn var(--t)}
+.lightbox img{max-width:min(960px,100%);max-height:85vh;border-radius:16px;box-shadow:var(--shadow-lg)}
+.lightbox figcaption{color:#fff;text-align:center;margin-top:10px;font-weight:700}
+@media(max-width:700px){.stats-strip{grid-template-columns:1fr 1fr}}
+</style>
+{% endblock %}
 {% block content %}
+{% set photo = media_url(provider['profile_photo_path']) %}
 <div class="page">
-<a class="muted" href="{{ url_for('customer_dashboard') }}">← Back</a>
-<section class="profile-hero" style="margin-top:10px"><div class="profile-cover">🧑‍🔧</div><div class="profile-main">
-{% if provider['profile_photo_path'] %}<img class="profile-avatar-lg profile-photo" src="{{ url_for('static',filename=provider['profile_photo_path']) }}" alt="{{ provider['name'] }}">{% else %}<div class="profile-avatar-lg">{{ provider['name'][:1]|upper }}</div>{% endif %}
-<div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><h1>{{ provider['name'] }}</h1><div class="profile-meta"><span>★ {{ '%.1f'|format(provider['rating'] or 0) }}</span><span>{{ provider['experience'] }}+ years</span><span>{{ '● Available now' if provider['is_online'] else '○ Offline' }}</span></div></div><span class="chip">Trust {{ provider['trust_score'] }}</span></div>
-<div class="chips" style="margin-top:14px">{% for skill in provider['skills'].replace(';',',').replace('|',',').split(',') %}{% if skill.strip() %}<span class="chip">{{ skill.strip() }}</span>{% endif %}{% endfor %}</div>
-<p class="muted" style="line-height:1.7;margin-top:16px">{{ provider['bio'] or 'Local professional available for the services shown above.' }}</p>
-<div class="chips">{% for b in badges %}<span class="chip">✓ {{ b['label'] }}</span>{% endfor %}{% if provider['ekyc_status'] in ['SUBMITTED','VERIFIED'] %}<span class="chip">🪪 Identity submitted</span>{% endif %}</div>
-<div class="action-row"><a class="primary-btn" href="{{ url_for('request_service') }}?mode=quick">Book Now</a>{% if provider['phone'] %}<a class="outline-btn" href="tel:{{ provider['phone'] }}">📞 Call</a>{% endif %}<a class="outline-btn" href="{{ url_for('provider_reviews',provider_id=provider['id']) }}">All reviews</a></div>
-</div></section>
-<section class="section-head"><div><h2>Portfolio</h2><div class="muted">Previous work shared by this professional.</div></div></section>
-<div class="portfolio-grid">{% for item in portfolio %}<article class="portfolio-card"><img src="{{ url_for('static',filename=item['image_path']) }}" alt="{{ item['title'] }}"><div><strong>{{ item['title'] }}</strong><p class="muted">{{ item['description'] or '' }}</p></div></article>{% else %}<div class="form-card"><p class="muted">No portfolio items uploaded yet.</p></div>{% endfor %}</div>
-<section class="section-head"><div><h2>Customer reviews</h2><div class="muted">Verified reviews from completed paid services.</div></div></section>
-{% for r in reviews %}<div class="review-card"><strong>{{ r['customer_name'] }} · <span class="rating">★ {{ r['rating'] }}</span></strong><p>{{ r['review'] or 'Great service.' }}</p><small class="muted">{{ r['created_at'] }}</small></div>{% else %}<div class="form-card"><p class="muted">No reviews yet.</p></div>{% endfor %}
+  <a class="muted" href="{{ url_for('customer_dashboard') if session.get('role')=='customer' else url_for('provider_dashboard') }}">← Back</a>
+  <section class="profile-hero reveal" style="margin-top:10px">
+    <div class="profile-cover">🧑‍🔧</div>
+    <div class="profile-main">
+      {% if photo %}<img class="profile-avatar-lg profile-photo" src="{{ photo }}" alt="{{ provider['name'] }}" data-initial="{{ provider['name'][:1]|upper }}">{% else %}<div class="profile-avatar-lg">{{ provider['name'][:1]|upper }}</div>{% endif %}
+      <div class="profile-top">
+        <div>
+          <h1>{{ provider['name'] }}</h1>
+          <div class="profile-meta">
+            <span class="rating">★ {{ '%.1f'|format(provider['rating'] or 0) }} <span class="muted">({{ provider['review_count'] or 0 }} reviews)</span></span>
+            <span>{{ provider['experience'] or 0 }}+ years</span>
+            <span class="{{ 'online' if provider['is_online'] else 'offline' }}">{{ '● Available now' if provider['is_online'] else '○ Currently offline' }}</span>
+            {% if provider['pincode'] %}<span>📍 PIN {{ provider['pincode'] }}</span>{% endif %}
+          </div>
+        </div>
+        <div class="trust-ring" style="--v:{{ provider['trust_score'] }}" title="SmartServe trust score"><span>{{ provider['trust_score']|round|int }}<small>trust</small></span></div>
+      </div>
+      <div class="chips" style="margin-top:14px">
+        {% for s in provider_services %}<span class="chip blue">{{ s['icon'] or '🛠️' }} {{ s['name'] }}</span>
+        {% else %}{% for skill in (provider['skills'] or '').replace(';',',').replace('|',',').split(',') %}{% if skill.strip() %}<span class="chip blue">{{ skill.strip() }}</span>{% endif %}{% endfor %}{% endfor %}
+      </div>
+      <p class="muted" style="line-height:1.7;margin-top:16px;font-size:14px">{{ provider['bio'] or 'Local professional available for the services shown above.' }}</p>
+      <div class="badge-row">
+        {% for b in badges %}<span class="badge">✓ {{ b['label'] }}</span>{% endfor %}
+        {% if (provider['ekyc_status'] or '')|upper == 'VERIFIED' %}<span class="badge">🪪 Identity verified</span>{% elif (provider['ekyc_status'] or '')|upper == 'SUBMITTED' %}<span class="badge" style="background:var(--yellow-soft);color:#9a6300;border-color:transparent">🪪 Identity under review</span>{% endif %}
+      </div>
+      <div class="stats-strip">
+        <div class="provider-info"><strong>{{ provider['completed_jobs'] or 0 }}</strong><span>Jobs completed</span></div>
+        <div class="provider-info"><strong>{{ provider['review_count'] or 0 }}</strong><span>Reviews</span></div>
+        <div class="provider-info"><strong>{{ portfolio|length }}</strong><span>Portfolio items</span></div>
+        <div class="provider-info"><strong>{{ provider_services|length }}</strong><span>Services</span></div>
+      </div>
+      <div class="action-row">
+        {% if session.get('role') == 'customer' %}
+        <a class="primary-btn" href="{{ url_for('request_service') }}?mode=quick{% if provider_services %}&service_id={{ provider_services[0]['id'] }}{% endif %}">Book this professional</a>
+        <button class="outline-btn" type="button" id="favBtn" onclick="toggleFav({{ provider['id'] }})">{{ '♥ Saved' if is_favorite else '♡ Save to favourites' }}</button>
+        {% elif session.get('role') == 'provider' and provider['user_id'] == session.get('user_id') %}
+        <a class="primary-btn" href="{{ url_for('provider_profile_edit') }}">Edit my profile</a>
+        {% endif %}
+        <a class="outline-btn" href="{{ url_for('provider_reviews',provider_id=provider['id']) }}">All reviews</a>
+      </div>
+      {% if session.get('role') == 'customer' %}<p class="muted" style="margin:10px 0 0;font-size:12px">📞 The provider’s phone number becomes available in chat once they accept your booking.</p>{% endif %}
+    </div>
+  </section>
+
+  <section class="section-head"><div><h2>Portfolio</h2><div class="muted">Previous work shared by this professional.</div></div></section>
+  <div class="portfolio-grid">
+    {% for item in portfolio %}{% set img = media_url(item['image_path']) %}
+    <article class="portfolio-item reveal">
+      {% if img %}<img src="{{ img }}" alt="{{ item['title'] }}" loading="lazy" onclick="openLightbox(this.src,'{{ item['title']|e }}')" style="cursor:zoom-in">{% else %}<div style="aspect-ratio:4/3;display:grid;place-items:center;background:var(--card3);color:var(--muted)">Image unavailable</div>{% endif %}
+      <div class="body"><strong>{{ item['title'] }}</strong>{% if item['description'] %}<p>{{ item['description'] }}</p>{% endif %}<div class="meta"><span>{{ item['created_at'][:10] if item['created_at'] else '' }}</span></div></div>
+    </article>
+    {% else %}<div class="empty-state" style="grid-column:1/-1"><div class="big">🖼️</div>No portfolio items shared yet.</div>{% endfor %}
+  </div>
+
+  <section class="section-head"><div><h2>Customer reviews</h2><div class="muted">Verified reviews from completed, paid services.</div></div></section>
+  <div class="review-list">
+    {% for r in reviews %}<div class="provider-review-card reveal"><div class="review-top"><strong>{{ r['customer_name'] }}</strong><span class="rating">{% for i in range(r['rating']|int) %}★{% endfor %}</span></div><p class="muted" style="margin:8px 0;font-size:13px">{{ r['review'] or 'Great service.' }}</p><small class="muted">{{ r['created_at'][:10] if r['created_at'] else '' }}</small></div>
+    {% else %}<div class="empty-state" style="grid-column:1/-1"><div class="big">⭐</div>No reviews yet — be the first to book.</div>{% endfor %}
+  </div>
 </div>
-<style>.portfolio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.portfolio-card{overflow:hidden;border:1px solid var(--line);border-radius:18px;background:var(--card)}.portfolio-card img{width:100%;height:180px;object-fit:cover}.portfolio-card div{padding:12px}.portfolio-card p{font-size:11px;line-height:1.5}@media(max-width:800px){.portfolio-grid{grid-template-columns:1fr 1fr}}@media(max-width:550px){.portfolio-grid{grid-template-columns:1fr}}</style>
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')"><figure style="margin:0"><img id="lightboxImg" alt=""><figcaption id="lightboxCap"></figcaption></figure></div>
+{% endblock %}
+{% block scripts %}
+<script>
+function openLightbox(src,cap){document.getElementById('lightboxImg').src=src;document.getElementById('lightboxCap').textContent=cap||'';document.getElementById('lightbox').classList.add('open');}
+async function toggleFav(id){const b=document.getElementById('favBtn');b.disabled=true;const d=await api('/favorites/'+id+'/toggle',{method:'POST'});b.disabled=false;if(!d.success){showToast(d.message||'Could not update favourites.','error');return;}b.textContent=d.favorited?'♥ Saved':'♡ Save to favourites';showToast(d.favorited?'Added to your favourites.':'Removed from favourites.','success');}
+</script>
 {% endblock %}

@@ -1,1 +1,38 @@
-{% extends "base.html" %}{% block title %}Provider Earnings{% endblock %}{% block content %}<div class="page"><div class="greeting"><div><div class="eyebrow">PROVIDER FINANCE</div><h1>Earnings</h1><p class="muted">Track gross earnings, SmartServe fees and net payout.</p></div><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">Dashboard</a></div><div class="provider-info-grid"><div class="provider-info"><strong>₹{{ '%.2f'|format(summary['gross'] or 0) }}</strong><span>Gross</span></div><div class="provider-info"><strong>₹{{ '%.2f'|format(summary['fee'] or 0) }}</strong><span>Platform fees</span></div><div class="provider-info"><strong>₹{{ '%.2f'|format(summary['net'] or 0) }}</strong><span>Net earnings</span></div></div><section class="section-head"><h2>Transactions</h2></section>{% for r in rows %}<div class="form-card" style="margin-bottom:8px"><strong>Request #{{ r['request_id'] }}</strong><span class="chip">{{ r['payout_status'] }}</span><div class="muted">Gross ₹{{ r['gross_amount'] }} · Fee ₹{{ r['platform_fee'] }} · Net ₹{{ r['net_amount'] }} · {{ r['created_at'] }}</div></div>{% else %}<div class="form-card"><p class="muted">Your paid completed services will appear here.</p></div>{% endfor %}</div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}SmartServe · Earnings{% endblock %}
+{% block head %}<style>
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}
+.kpi{padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:var(--shadow-xs)}
+.kpi strong{display:block;font-size:24px;letter-spacing:-.02em}.kpi span{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.kpi.green strong{color:var(--green)}
+.month-bars{display:grid;gap:8px}.month-bars .bar{display:grid;grid-template-columns:70px 1fr 90px;gap:10px;align-items:center;font-size:13px}
+.month-bars .track{height:10px;border-radius:999px;background:var(--card2);border:1px solid var(--line);overflow:hidden}.month-bars .fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--green));border-radius:999px}
+.tx{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:14px 16px;border:1px solid var(--line);border-radius:16px;background:var(--card);margin-bottom:8px}
+.tx small{display:block;color:var(--muted);margin-top:3px}
+.two{display:grid;grid-template-columns:1.3fr .9fr;gap:16px;align-items:start}
+@media(max-width:900px){.kpis{grid-template-columns:1fr 1fr}.two{grid-template-columns:1fr}}
+</style>{% endblock %}
+{% block content %}
+<div class="page" style="max-width:1080px">
+  <div class="greeting reveal"><div><span class="eyebrow">Business Hub · Finance</span><h1>Earnings</h1><p class="muted">Every paid service creates an earnings record: gross amount, SmartServe platform fee and your net payout.</p></div><div class="row"><a class="outline-btn" href="{{ url_for('marketplace_features') }}">← Business Hub</a><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">Dashboard</a></div></div>
+  <div class="kpis reveal">
+    <div class="kpi green"><strong>₹{{ '{:,.0f}'.format(summary['net'] or 0) }}</strong><span>Net earnings</span></div>
+    <div class="kpi"><strong>₹{{ '{:,.0f}'.format(summary['gross'] or 0) }}</strong><span>Gross billed</span></div>
+    <div class="kpi"><strong>₹{{ '{:,.0f}'.format(summary['fee'] or 0) }}</strong><span>Platform fees</span></div>
+    <div class="kpi"><strong>{{ summary['jobs'] or 0 }}</strong><span>Paid jobs</span></div>
+  </div>
+  <div class="two">
+    <section>
+      <div class="section-head" style="margin-top:0"><div><span class="eyebrow">History</span><h2>Transactions</h2></div></div>
+      {% for r in rows %}
+      <div class="tx reveal"><div><strong>{{ r['service_name'] or 'Service' }} · #{{ r['request_id'] }}</strong><small>{{ r['customer_name'] or 'Customer' }} · {{ r['created_at'] }}</small><small>Gross ₹{{ '%.2f'|format(r['gross_amount'] or 0) }} − fee ₹{{ '%.2f'|format(r['platform_fee'] or 0) }}</small></div><div style="text-align:right"><strong style="font-size:18px">₹{{ '%.2f'|format(r['net_amount'] or 0) }}</strong><br><span class="chip {{ 'green' if r['payout_status']=='PAID' else '' }}">{{ (r['payout_status'] or 'PENDING')|replace('_',' ') }}</span></div></div>
+      {% else %}<div class="empty-state">No paid services yet. Once a customer verifies your work and pays, the payout appears here.</div>{% endfor %}
+    </section>
+    <aside class="stack">
+      <section class="form-card reveal"><span class="eyebrow">Payout status</span><strong style="font-size:22px;display:block;margin:6px 0">₹{{ '{:,.0f}'.format(pending['net'] or 0) }}</strong><p class="muted" style="margin:0">Pending settlement to your bank account. Settled amounts are marked PAID in the list.</p></section>
+      <section class="form-card reveal"><span class="eyebrow">Last 6 months</span><div class="month-bars" style="margin-top:10px">{% set top = (monthly|map(attribute='net')|max) if monthly else 0 %}{% for m in monthly %}<div class="bar"><span>{{ m['month'] }}</span><div class="track"><div class="fill" style="width:{{ (100*m['net']/top)|round if top else 0 }}%"></div></div><strong style="text-align:right">₹{{ '{:,.0f}'.format(m['net']) }}</strong></div>{% else %}<div class="muted">No monthly data yet.</div>{% endfor %}</div></section>
+      <section class="form-card reveal"><span class="eyebrow">Awaiting customer action</span>{% for a in awaiting %}<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px"><span>#{{ a['id'] }} · {{ a['service_name'] }}</span><span class="muted">{{ a['status']|replace('_',' ')|lower }}{% if a['agreed_amount'] %} · ₹{{ a['agreed_amount'] }}{% endif %}</span></div>{% else %}<p class="muted" style="margin:6px 0 0">No services waiting for verification or payment.</p>{% endfor %}</section>
+    </aside>
+  </div>
+</div>
+{% endblock %}

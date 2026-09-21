@@ -1,1 +1,21 @@
-{% extends "base.html" %}{% block title %}Customer Reviews{% endblock %}{% block content %}<div class="page"><div class="greeting"><div><div class="eyebrow">YOUR REPUTATION</div><h1>Customer Reviews</h1><p class="muted">Feedback from customers who completed paid services with you.</p></div><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">Dashboard</a></div><div class="form-card"><strong style="font-size:28px">★ {{ '%.2f'|format(avg['avg'] or 0) }}</strong><div class="muted">{{ avg['cnt'] }} verified reviews</div></div>{% for r in rows %}<article class="review-card" style="margin-top:10px"><strong>{{ r['customer_name'] }} · ★ {{ r['rating'] }}</strong><div class="muted">{{ r['service_name'] }} · {{ r['created_at'] }}</div><p>{{ r['review'] or 'Customer left a rating without a comment.' }}</p></article>{% else %}<div class="form-card"><p class="muted">No customer reviews yet.</p></div>{% endfor %}</div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}SmartServe · Customer reviews{% endblock %}
+{% block head %}<style>
+.rating-hero{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:center;padding:20px 22px;border:1px solid var(--line);border-radius:22px;background:var(--card);box-shadow:var(--shadow-xs);margin:18px 0}
+.rating-hero .big{font-size:52px;font-weight:800;letter-spacing:-.04em;line-height:1}
+.dist{display:grid;gap:6px}.dist .r{display:grid;grid-template-columns:44px 1fr 40px;gap:10px;align-items:center;font-size:12.5px}
+.dist .track{height:9px;border-radius:999px;background:var(--card2);border:1px solid var(--line);overflow:hidden}.dist .fill{height:100%;background:var(--yellow);border-radius:999px}
+.review-card{padding:16px 18px;border:1px solid var(--line);border-radius:18px;background:var(--card);margin-bottom:10px;box-shadow:var(--shadow-xs)}
+.review-card .top{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.stars{color:var(--yellow);letter-spacing:2px}
+@media(max-width:700px){.rating-hero{grid-template-columns:1fr}}
+</style>{% endblock %}
+{% block content %}
+<div class="page" style="max-width:900px">
+  <div class="greeting reveal"><div><span class="eyebrow">Business Hub · Reputation</span><h1>Customer reviews</h1><p class="muted">Only customers who completed and paid for a service with you can leave a review.</p></div><div class="row"><a class="outline-btn" href="{{ url_for('marketplace_features') }}">← Business Hub</a><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">Dashboard</a></div></div>
+  <div class="rating-hero reveal"><div style="text-align:center"><div class="big">{{ '%.1f'|format(avg['avg'] or 0) }}</div><div class="stars">{% for i in range(1,6) %}{{ '★' if i <= (avg['avg'] or 0)|round(0,'floor') else '☆' }}{% endfor %}</div><div class="muted">{{ avg['cnt'] }} verified review{{ 's' if avg['cnt'] != 1 }}</div></div><div class="dist">{% for d in distribution %}<div class="r"><span>{{ d.stars }} ★</span><div class="track"><div class="fill" style="width:{{ d.pct }}%"></div></div><span class="muted">{{ d.count }}</span></div>{% endfor %}</div></div>
+  {% for r in rows %}
+  <article class="review-card reveal"><div class="top"><strong>{{ r['customer_name'] }}</strong><span class="stars">{% for i in range(1,6) %}{{ '★' if i <= r['rating'] else '☆' }}{% endfor %}</span></div><div class="muted" style="font-size:12.5px">{{ r['service_name'] }} · {{ r['created_at'] }}</div><p style="margin:8px 0 0">{{ r['review'] or 'Customer left a rating without a comment.' }}</p></article>
+  {% else %}<div class="empty-state">No customer reviews yet. Complete services with proof and payment to start collecting verified feedback.</div>{% endfor %}
+</div>
+{% endblock %}

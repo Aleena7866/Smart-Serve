@@ -1,81 +1,122 @@
 {% extends "base.html" %}
-{% block title %}SmartServe | Home{% endblock %}
+{% block title %}SmartServe · Home{% endblock %}
+{% block head %}
+<style>
+.tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.tool-card{border:1px solid var(--line);border-radius:16px;background:var(--card);color:inherit;text-decoration:none;padding:14px;display:grid;gap:4px;text-align:left;font:inherit;cursor:pointer;box-shadow:var(--shadow-xs);transition:transform var(--t) var(--ease-spring),box-shadow var(--t),border-color var(--t)}
+.tool-card:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:var(--line-strong)}
+.tool-card .ico{font-size:22px}.tool-card strong{font-size:13px}.tool-card small{color:var(--muted);font-size:11.5px}
+.location-line{display:flex;align-items:center;gap:8px;margin:10px 3px;color:var(--muted);font-size:12px;flex-wrap:wrap}
+.provider-mini img.avatar{object-fit:cover}
+@media(max-width:700px){.tool-grid{grid-template-columns:1fr 1fr}}
+</style>
+{% endblock %}
 {% block content %}
+{% set active_count = requests|selectattr('status','in',['ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT'])|list|length %}
 <div class="page">
-  <section class="greeting">
-    <div><div class="eyebrow">SMART SERVICE MARKETPLACE</div><h1>Hello, {{ session.get('user_name','there').split(' ')[0] }} 👋</h1><div class="muted">What service do you need today?</div></div>
-    <a class="primary-btn" href="{{ url_for('request_service') }}?mode=quick">+ Book a service</a>
+  <section class="greeting reveal">
+    <div><span class="eyebrow">Smart service marketplace</span><h1>Hello, {{ session.get('user_name','there').split(' ')[0] }} 👋</h1><div class="muted">What do you need help with today?</div></div>
+    <a class="primary-btn btn-lg" href="{{ url_for('request_service') }}?mode=quick">＋ Book a service</a>
   </section>
 
-  <section class="form-card smart-tools"><div><div class="eyebrow">SMARTSERVE SAFETY & TOOLS</div><h2>Everything for a safer local service</h2><div class="muted">Live tracking, arrival PIN, provider trust, warranty, repeat services and support.</div></div><div class="tool-grid"><a class="tool-card" href="#bookings">🗺️<strong>Live service</strong><small>Track your active job</small></a><button class="tool-card" onclick="savePreferences()">🌐<strong>Language</strong><small>Local-language mode</small></button><button class="tool-card" onclick="addTrustedContact()">🛡️<strong>Trusted contact</strong><small>Safety contact</small></button><button class="tool-card" onclick="toggleLowBandwidth()">📶<strong>Low bandwidth</strong><small>Save data</small></button></div></section>
+  {% if active_count %}
+  <div class="notice info reveal" style="margin-bottom:14px"><span>🟢</span><span><strong>{{ active_count }} active service{{ 's' if active_count != 1 }}</strong> — scroll to <a href="#bookings" style="color:var(--blue);font-weight:800">My bookings</a> for live tracking, chat and payment.</span></div>
+  {% endif %}
 
-  <div class="searchbar"><span>⌕</span><input id="serviceSearch" placeholder="Search for services..." oninput="filterServices(this.value)"><span>⌁</span></div>
-  <div class="location-line" style="display:flex;align-items:center;gap:7px;margin:9px 3px;color:var(--muted);font-size:10px"><span style="color:var(--blue)">●</span> Your live location powers nearby-provider matching <button class="outline-btn" style="padding:6px 9px;margin-left:auto;font-size:9px" onclick="requestLocationNow(this)">Use my location</button></div>
-
-  <section class="hero-card">
-    <div><div style="font-size:10px;font-weight:800;letter-spacing:1px;opacity:.85">AI POWERED · TRUSTED · NEAR YOU</div><h2>Get the right professional in a few taps.</h2><p>Use Quick Booking for instant service requests, or describe a complex problem and let Gemini provide a preliminary diagnosis.</p><a class="outline-btn" style="background:#fff;color:#1269f5;border:0" href="{{ url_for('request_service') }}">Try AI analysis →</a></div>
+  <section class="hero-card reveal">
+    <div><div style="font-size:11px;font-weight:800;letter-spacing:.1em;opacity:.85">AI POWERED · TRUSTED · NEAR YOU</div><h2>Get the right professional in a few taps.</h2><p>Use Quick Booking for a direct request, or describe a complex problem and let the AI assistant give you a preliminary diagnosis and price estimate.</p><div class="row"><a class="primary-btn" href="{{ url_for('request_service') }}?mode=ai">🤖 Try AI diagnosis</a><a class="outline-btn" href="{{ url_for('request_service') }}?mode=quick">Quick booking</a></div></div>
     <div class="hero-robot">🤖</div>
   </section>
 
-  <div class="section-head" id="services"><h2>Popular Services</h2><a href="{{ url_for('request_service') }}?mode=quick">View All</a></div>
+  <div class="searchbar" style="margin-top:16px"><span>⌕</span><input id="serviceSearch" placeholder="Search services — plumbing, AC repair, cleaning…" oninput="filterServices(this.value)" aria-label="Search services"></div>
+  <div class="location-line"><span data-location-note>Your live location powers nearby-provider matching during a service.</span><button class="outline-btn btn-sm" style="margin-left:auto" onclick="requestLocationNow(this)">📍 Use my location</button></div>
+
+  <div class="section-head" id="services"><h2>Services</h2><a href="{{ url_for('request_service') }}?mode=quick">Book any service →</a></div>
   <div class="service-grid" id="serviceGrid">
-    {% set icons={'Plumbing':'🔧','Electrical':'⚡','Carpentry':'🔨','Cleaning':'🧹','Appliance Repair':'🔌','Mobile Repair':'📱','Laptop Repair':'💻','Basic IT Support':'🖥️'} %}
-    {% for service in ['Plumbing','Electrical','Carpentry','Cleaning','Appliance Repair','Mobile Repair','Laptop Repair','Basic IT Support'] %}
-      <a class="service-tile service-filter" data-name="{{ service|lower }}" href="{{ url_for('request_service') }}?mode=quick&service={{ service|urlencode }}"><div class="service-icon">{{ icons.get(service,'🛠️') }}</div><strong>{{ service }}</strong></a>
+    {% for service in services %}
+      <a class="service-tile service-filter reveal" data-name="{{ service['name']|lower }} {{ (service['category'] or '')|lower }}" href="{{ url_for('request_service') }}?mode=quick&service={{ service['name']|urlencode }}"><div class="service-icon">{{ service['icon'] or '🛠️' }}</div><strong>{{ service['name'] }}</strong></a>
     {% endfor %}
   </div>
+  <div class="empty-state" id="serviceEmpty" style="display:none;margin-top:10px">No service matches your search. Try “AI diagnosis” to describe the problem instead.</div>
 
-  <div class="section-head"><h2>Top Rated Providers</h2><a href="{{ url_for('request_service') }}?mode=quick">View All</a></div>
+  <section class="form-card reveal" style="margin-top:22px">
+    <div class="row space-between"><div><span class="eyebrow">Customer safety & tools</span><h2 style="margin:4px 0 0;font-size:18px">Everything for a safer local service</h2></div><a href="{{ url_for('marketplace_features') }}" style="font-size:12px;font-weight:800;color:var(--blue)">Open Safety centre →</a></div>
+    <div class="tool-grid">
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#contacts"><span class="ico">🛡️</span><strong>Trusted contacts</strong><small>People we alert on SOS</small></a>
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#sos"><span class="ico">🆘</span><strong>Emergency SOS</strong><small>Alert operations · call 112</small></a>
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#disputes"><span class="ico">⚖️</span><strong>Dispute centre</strong><small>Report a service issue</small></a>
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#warranty"><span class="ico">🧾</span><strong>Service warranty</strong><small>7-day workmanship cover</small></a>
+      <button class="tool-card" type="button" onclick="openPreferencesDialog()"><span class="ico">🌐</span><strong>Language</strong><small>Local-language mode</small></button>
+      <button class="tool-card" type="button" onclick="toggleLowBandwidth(this)"><span class="ico">📶</span><strong>Low bandwidth</strong><small id="lowBwLabel">{{ 'On · lighter pages' if low_bandwidth else 'Off · save data on slow networks' }}</small></button>
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#repeat"><span class="ico">🔁</span><strong>Repeat a booking</strong><small>Rebook a past service</small></a>
+      <a class="tool-card" href="{{ url_for('marketplace_features') }}#favorites"><span class="ico">♥</span><strong>Favourites</strong><small>Your saved providers</small></a>
+    </div>
+  </section>
+
+  {% if upcoming_plans %}
+  <section class="form-card reveal" style="margin-top:16px"><div class="section-head" style="margin:0 0 10px"><div><span class="eyebrow">Repeat plans</span><h2 style="font-size:17px;margin:4px 0 0">Upcoming maintenance visits</h2></div><a href="{{ url_for('marketplace_features') }}#repeat">Manage →</a></div>
+    <div class="stack">{% for pl in upcoming_plans %}<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--card2)"><div><strong>{{ pl['service_name'] }}</strong> <span class="chip">{{ pl['frequency']|lower }}</span><div class="muted" style="font-size:12.5px">{% if pl['provider_name'] %}with {{ pl['provider_name'] }} · {% endif %}{% if pl['days_left'] is not none and pl['days_left'] <= 0 %}<strong style="color:var(--red)">Due now</strong>{% elif pl['days_left'] is not none %}due in {{ pl['days_left'] }} day{{ 's' if pl['days_left'] != 1 }}{% endif %} · {{ pl['next_run_at'] }}</div></div><a class="{{ 'primary-btn' if pl['days_left'] is not none and pl['days_left'] <= 3 else 'outline-btn' }} btn-sm" href="{{ url_for('request_service') }}?service={{ pl['service_name']|urlencode }}&mode=quick">Book this visit →</a></div>{% endfor %}</div></section>
+  {% endif %}
+
+  <div class="section-head"><h2>Top-rated providers</h2><a href="{{ url_for('request_service') }}?mode=quick">Find providers →</a></div>
   <div class="provider-strip">
-    {% for p in top_providers %}
-    <a class="provider-mini" href="{{ url_for('provider_profile', provider_id=p['provider_id']) }}"><div class="avatar">{{ p['name'][:1]|upper }}</div><div><strong>{{ p['name'] }}</strong><div class="rating">★ {{ '%.1f'|format(p['rating'] or 0) }}</div><div class="online">● {{ 'Available' if p['is_online'] else 'Usually available' }}</div></div></a>
-    {% endfor %}
+    {% for p in top_providers %}{% set pp = media_url(p['profile_photo_path']) %}
+    <a class="provider-mini reveal" href="{{ url_for('provider_profile', provider_id=p['provider_id']) }}">{% if pp %}<img class="avatar" src="{{ pp }}" alt="{{ p['name'] }}" data-initial="{{ p['name'][:1]|upper }}">{% else %}<div class="avatar">{{ p['name'][:1]|upper }}</div>{% endif %}<div style="min-width:0"><strong style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ p['name'] }}</strong><div class="rating">★ {{ '%.1f'|format(p['rating'] or 0) }} <span class="muted">({{ p['review_count'] or 0 }})</span></div><div class="{{ 'online' if p['is_online'] else 'offline' }}">{{ '● Available now' if p['is_online'] else '○ Offline' }}</div></div></a>
+    {% else %}<div class="empty-state" style="grid-column:1/-1">No providers registered yet.</div>{% endfor %}
   </div>
 
   <section id="bookings">
-    <div class="section-head"><div><h2>My Bookings</h2><div class="muted">Live request status updates automatically.</div></div></div>
-    <div class="booking-tabs"><button class="active" onclick="filterBookings('all',this)">Upcoming</button><button onclick="filterBookings('COMPLETED',this)">Completed</button><button onclick="filterBookings('REJECTED',this)">Cancelled</button></div>
+    <div class="section-head"><div><h2>My bookings</h2><div class="muted">Status updates in real time.</div></div></div>
+    <div class="booking-tabs"><button class="active" onclick="filterBookings('all',this)">Active</button><button onclick="filterBookings('COMPLETED',this)">Completed</button><button onclick="filterBookings('CLOSED',this)">Cancelled</button></div>
     <div class="booking-grid" id="bookingGrid">
-      {% for r in requests %}
-      <article class="booking-card booking-item" data-status="{{ r['status'] }}" data-request-id="{{ r['id'] }}">
-        <div class="top"><div class="avatar">{{ r['service_name'][:1]|upper }}</div><div><h3>{{ r['service_name'] }}</h3><div class="muted">{{ r['provider_name'] or 'Choose a professional' }}</div></div><span class="status-pill {% if r['status']=='PENDING' %}pending{% elif r['status']=='REJECTED' %}red{% elif r['status'] in ['COMPLETED'] %}blue{% else %}green{% endif %} request-status">{{ r['status'].replace('_',' ') }}</span></div>
+      {% for r in requests %}{% set ppp = media_url(r['provider_photo']) %}
+      <article class="booking-card booking-item reveal" data-status="{{ r['status'] }}" data-request-id="{{ r['id'] }}">
+        <div class="top">
+          {% if ppp %}<img class="avatar" src="{{ ppp }}" alt="{{ r['provider_name'] }}" data-initial="{{ (r['provider_name'] or 'P')[:1]|upper }}">{% else %}<div class="avatar">{{ r['service_name'][:1]|upper }}</div>{% endif %}
+          <div><h3>{{ r['service_name'] }} <span class="muted" style="font-weight:600">#{{ r['id'] }}</span></h3><div class="muted">{% if r['provider_name'] %}<a href="{{ url_for('provider_profile', provider_id=r['provider_id']) }}" style="font-weight:700">{{ r['provider_name'] }}</a>{% else %}Choose a professional{% endif %}{% if r['provider_rating'] %} · ★ {{ '%.1f'|format(r['provider_rating']) }}{% endif %}</div></div>
+          <span class="status-pill request-status {% if r['status'] in ['PENDING','SEARCHING','OFFERED','ASSIGNED','SCHEDULED'] %}pending{% elif r['status'] in ['REJECTED','CANCELLED'] %}red{% elif r['status']=='COMPLETED' %}blue{% endif %}">{{ r['status'].replace('_',' ') }}</span>
+        </div>
         <p>{{ r['description'] }}</p>
-        {% if r['provider_id'] %}<div class="muted">{% if r['provider_rating'] %}★ {{ '%.1f'|format(r['provider_rating']) }} · {% endif %}{{ 'Online' if r['provider_online'] else 'Selected professional' }}</div>{% endif %}
-        {% if r['status'] in ['PENDING','SEARCHING','OFFERED'] %}<div class="action-row"><a class="primary-btn" href="{{ url_for('searching',request_id=r['id']) }}">{% if r['status']=='PENDING' %}Choose a provider{% else %}Compare providers{% endif %} →</a></div>{% endif %}
-        {% if r['provider_id'] and r['status'] in ['ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
-          <div class="map-card" style="margin-top:12px"><div class="tracking-head"><div><strong>📍 Live tracking</strong><small data-live-location-status>Waiting for live GPS…</small><small data-eta>Waiting for both live locations…</small></div><small>Only real browser GPS · route ETA when both devices are live</small></div><button class="outline-btn" style="font-size:9px;padding:7px 9px" onclick="requestLocationNow(this)">Refresh my live GPS</button><div class="smart-map" id="customer-map-{{ r['id'] }}" data-request-id="{{ r['id'] }}"></div></div>
-        {% endif %}
-        {% if r['status']=='ASSIGNED' and r['provider_id'] %}<div class="match-note">📨 <strong>{{ r['provider_name'] or 'Selected professional' }}</strong> has your request. <span class="muted">Waiting for the provider to accept or decline.</span></div>{% endif %}
-        {% if r['provider_id'] and r['status'] in ['ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
-          <div class="action-row customer-contact-actions"><button class="primary-btn" onclick="openChat({{ r['id'] }})">💬 Chat provider</button><button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate price</button><a class="outline-btn" href="{{ url_for('live_service',request_id=r['id']) }}">🗺️ Live service</a><button class="outline-btn" type="button" onclick="callSmartServe({{ (r['provider_phone'] or '')|tojson }},{{ (r['provider_name'] or 'Provider')|tojson }})">📞 Call provider</button></div>
-        {% endif %}
-        {% if r['status'] in ['SEARCHING','OFFERED'] %}<div class="match-note">🟢 {{ 'Providers are available for you to compare. Choose the professional you trust based on trust score, profile, experience and distance.' }}</div>{% endif %}
-        {% if r['status']=='ARRIVED' %}
-          <div class="arrival-code-card">
-            <div><span class="eyebrow">PROVIDER ARRIVED</span><h4>Give this confirmation code to your provider</h4><p class="muted">Only share it after you confirm the professional has reached your home or office.</p></div>
-            <div class="confirmation-code">{{ r['confirmation_code'] or '------' }}</div>
-            <small class="muted">The provider must enter this code before the service can start.</small>
+        {% if r['agreed_amount'] %}<span class="chip green">Agreed ₹{{ '%.0f'|format(r['agreed_amount']|float) }}</span>{% endif %}
+        {% if r['status'] in ['PENDING','SEARCHING','OFFERED'] %}<div class="action-row"><a class="primary-btn" href="{{ url_for('searching',request_id=r['id']) }}">{% if r['status']=='PENDING' %}Choose a provider{% else %}Compare providers{% endif %} →</a><button class="outline-btn" type="button" onclick="cancelRequest({{ r['id'] }})">Cancel request</button></div>{% endif %}
+        {% if r['status']=='ASSIGNED' and r['provider_id'] %}<div class="match-note">📨 <strong>{{ r['provider_name'] or 'Selected professional' }}</strong> has your request. <span class="muted">Waiting for them to accept or decline.</span></div>{% endif %}
+        {% if r['provider_id'] and r['status'] in ['ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT'] %}
+          <div class="map-card" style="margin-top:12px">
+            <div class="tracking-head"><div><strong>📍 Live tracking</strong><div class="muted" data-live-location-status>Waiting for live GPS…</div></div><div class="row"><a class="outline-btn btn-sm" href="{{ url_for('live_service',request_id=r['id']) }}">Full view</a><button class="outline-btn btn-sm" onclick="requestLocationNow(this)">Refresh my GPS</button></div></div>
+            <div class="smart-map" id="customer-map-{{ r['id'] }}" data-request-id="{{ r['id'] }}"></div>
+            <div class="tracking-metrics"><div class="tracking-metric"><strong data-distance>—</strong><span>Provider distance</span></div><div class="tracking-metric"><strong data-eta-value>—</strong><span>ETA · <em data-eta-note>waiting</em></span></div><div class="tracking-metric"><strong data-arrival-hint style="font-size:13px">Tracking…</strong><span>Arrival check (200 m)</span></div></div>
           </div>
         {% endif %}
-        {% if r['status']=='AWAITING_VERIFICATION' %}
-          <div class="verify-box"><h4>Provider completion proof</h4><p class="muted">Review the photos uploaded by your provider before verifying the completed work.</p><div class="proof-grid">{% for proof in (r['completion_proof_paths']|from_json) %}<a href="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" target="_blank" rel="noopener"><img src="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" alt="Provider completion proof"></a>{% endfor %}</div><form method="post" action="{{ url_for('verify_service',request_id=r['id']) }}" enctype="multipart/form-data"><label class="file-input">Upload your verification photo<input type="file" name="verification_image" accept="image/*" required></label><button class="primary-btn" type="submit">Verify & continue to payment →</button></form></div>
+        {% if r['provider_id'] and r['status'] in ['ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT','COMPLETED'] %}
+          <div class="action-row customer-contact-actions"><button class="primary-btn" onclick="openChat({{ r['id'] }})">💬 Chat</button>{% if r['status'] != 'COMPLETED' %}<button class="outline-btn" onclick="openNegotiation({{ r['id'] }})">🤝 Negotiate</button>{% endif %}<button class="outline-btn" type="button" onclick="callSmartServe({{ (r['provider_phone'] or '')|tojson }},{{ (r['provider_name'] or 'Provider')|tojson }})">📞 Call</button>{% if r['status'] != 'COMPLETED' %}<a class="danger-btn btn-sm" href="{{ url_for('marketplace_features') }}#sos">🆘 SOS</a>{% endif %}</div>
         {% endif %}
-        {% if r['status']=='AWAITING_PAYMENT' and r['agreed_amount'] %}<div class="pay-box"><h4>Ready for payment</h4><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><strong>₹{{ '%.2f'|format(r['agreed_amount']|float) }}</strong><button class="primary-btn" onclick="paySmartServe({{ r['id'] }},this)">Pay securely</button></div></div>{% endif %}
-        {% if r['payment_status']=='PAID' %}<div class="muted" style="margin-top:10px;color:var(--green);font-weight:800">✓ Payment verified securely</div>{% endif %}
-        {% if r['status']=='COMPLETED' %}<div class="action-row"><a class="outline-btn" href="{{ url_for('review_service',request_id=r['id']) }}">★ Review provider</a></div>{% endif %}
+        {% if r['status'] in ['SEARCHING','OFFERED'] %}<div class="match-note">🟢 Providers are available to compare. Choose the professional you trust based on trust score, profile, experience and distance.</div>{% endif %}
+        {% if r['status']=='ARRIVED' %}
+          <div class="arrival-code-card"><div><span class="eyebrow">Provider arrived</span><h4>Give this confirmation code to your provider</h4><p class="muted">Share it only after you confirm the professional has reached you.</p></div><div class="confirmation-code">{{ r['confirmation_code'] or '------' }}</div><small class="muted">The provider must enter this code before the service can start.</small></div>
+        {% endif %}
+        {% if r['status']=='AWAITING_VERIFICATION' %}
+          <div class="verify-box"><h4>Provider completion proof</h4><p class="muted">Review the photos your provider uploaded before verifying the completed work.</p><div class="proof-grid">{% for proof in (r['completion_proof_paths']|from_json) %}<a href="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" target="_blank" rel="noopener"><img src="{{ url_for('service_proof',request_id=r['id'],filename=proof|replace('uploads/','')) }}" alt="Provider completion proof"></a>{% endfor %}</div><form method="post" action="{{ url_for('verify_service',request_id=r['id']) }}" enctype="multipart/form-data"><label class="file-input">Upload your verification photo<input type="file" name="verification_image" accept="image/jpeg,image/png,image/webp" required></label><button class="primary-btn" type="submit" data-busy-text="Verifying…">Verify & continue to payment →</button></form><div class="muted" style="margin-top:8px">Not happy with the work? <a href="{{ url_for('marketplace_features') }}#disputes" style="color:var(--blue);font-weight:700">Open a dispute</a> before paying.</div></div>
+        {% endif %}
+        {% if r['status']=='AWAITING_PAYMENT' %}{% if r['agreed_amount'] %}<div class="pay-box"><h4>Ready for payment</h4><div class="row space-between"><strong style="font-size:20px">₹{{ '%.2f'|format(r['agreed_amount']|float) }}</strong><button class="primary-btn" onclick="paySmartServe({{ r['id'] }},this)">Pay securely</button></div><small class="muted">Payment releases your 7-day workmanship warranty.</small></div>{% else %}<div class="pay-box"><h4>Waiting for the agreed price</h4><p class="muted">Ask your provider to set the final amount, or agree one via Negotiate.</p></div>{% endif %}{% endif %}
+        {% if r['payment_status']=='PAID' %}<div class="muted" style="margin-top:10px;color:var(--green);font-weight:800">✓ Payment verified{% if r['warranty_until'] %} · Warranty until {{ r['warranty_until'][:10] }}{% endif %}</div>{% endif %}
+        {% if r['status']=='COMPLETED' %}<div class="action-row"><a class="outline-btn" href="{{ url_for('review_service',request_id=r['id']) }}">★ Review provider</a><a class="outline-btn" href="{{ url_for('marketplace_features') }}#warranty">🧾 Warranty</a></div>{% endif %}
       </article>
       {% else %}
-      <div class="form-card"><h3>No bookings yet</h3><p class="muted">Choose a service above and book your first professional.</p></div>
+      <div class="empty-state" style="grid-column:1/-1"><div class="big">🧰</div><strong>No bookings yet</strong><div class="muted">Choose a service above and book your first professional.</div></div>
       {% endfor %}
     </div>
+    <div class="empty-state" id="bookingEmpty" style="display:none;margin-top:10px">Nothing here yet.</div>
   </section>
 </div>
+{% endblock %}
+{% block scripts %}
 <script>
-function filterServices(q){q=q.toLowerCase();document.querySelectorAll('.service-filter').forEach(x=>x.style.display=x.dataset.name.includes(q)?'block':'none')}
-function filterBookings(status,btn){document.querySelectorAll('.booking-tabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.booking-item').forEach(x=>{const s=x.dataset.status;x.style.display=(status==='all'?(s!=='COMPLETED'&&s!=='REJECTED'):s===status)?'block':'none'})}
-async function savePreferences(){const language=prompt('Language code: en, hi, kn, ta, te, mr','en')||'en';const d=await fetch('/api/preferences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language,low_bandwidth:document.body.classList.contains('low-bandwidth')})}).then(r=>r.json());alert(d.success?'Language preference saved.':'Unable to save preference.');}
-async function addTrustedContact(){const name=prompt('Trusted contact name');if(!name)return;const phone=prompt('Trusted contact phone');if(!phone)return;const relationship=prompt('Relationship (optional)')||'';const d=await fetch('/api/trusted-contact',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,phone,relationship})}).then(r=>r.json());alert(d.message||'Trusted contact saved.');}
-async function toggleLowBandwidth(){const enabled=!document.body.classList.contains('low-bandwidth');const d=await fetch('/api/preferences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'en',low_bandwidth:enabled})}).then(r=>r.json());if(d.success){document.body.classList.toggle('low-bandwidth',enabled);alert(enabled?'Low-bandwidth mode enabled.':'Low-bandwidth mode disabled.');}else alert('Unable to save preference.');}
+function filterServices(q){q=q.toLowerCase().trim();let n=0;document.querySelectorAll('.service-filter').forEach(x=>{const ok=x.dataset.name.includes(q);x.style.display=ok?'block':'none';if(ok)n++;});document.getElementById('serviceEmpty').style.display=n?'none':'block';}
+function filterBookings(status,btn){document.querySelectorAll('.booking-tabs button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');let n=0;document.querySelectorAll('.booking-item').forEach(x=>{const s=x.dataset.status;let ok;if(status==='all')ok=!['COMPLETED','REJECTED','CANCELLED','EXPIRED'].includes(s);else if(status==='CLOSED')ok=['REJECTED','CANCELLED','EXPIRED'].includes(s);else ok=s===status;x.style.display=ok?'block':'none';if(ok)n++;});const e=document.getElementById('bookingEmpty');e.style.display=n||!document.querySelectorAll('.booking-item').length?'none':'block';e.textContent=status==='all'?'No active bookings right now.':status==='COMPLETED'?'No completed services yet.':'No cancelled bookings.';}
+filterBookings('all',document.querySelector('.booking-tabs button'));
+const LANGS=[{value:'en',label:'English'},{value:'hi',label:'हिन्दी (Hindi)'},{value:'kn',label:'ಕನ್ನಡ (Kannada)'},{value:'ta',label:'தமிழ் (Tamil)'},{value:'te',label:'తెలుగు (Telugu)'},{value:'mr',label:'मराठी (Marathi)'}];
+async function openPreferencesDialog(){const cur=document.documentElement.lang||'en';const v=await uiPrompt({title:'Preferred language',message:'Used for notifications and the interface language attribute.',type:'select',options:LANGS.map(l=>({value:l.value,label:l.label+(l.value===cur?' · current':'')})),okText:'Save'});if(v==null)return;const d=await api('/api/preferences',{method:'POST',body:{language:v,low_bandwidth:document.body.classList.contains('low-bandwidth')}});if(d.success){document.documentElement.lang=v;showToast('Language preference saved.','success');}else showToast(d.message||'Unable to save preference.','error');}
+async function toggleLowBandwidth(btn){const enabled=!document.body.classList.contains('low-bandwidth');btn.disabled=true;const d=await api('/api/preferences',{method:'POST',body:{language:document.documentElement.lang||'en',low_bandwidth:enabled}});btn.disabled=false;if(d.success){document.body.classList.toggle('low-bandwidth',enabled);document.getElementById('lowBwLabel').textContent=enabled?'On · lighter pages':'Off · save data on slow networks';showToast(enabled?'Low-bandwidth mode on: lighter maps and images.':'Low-bandwidth mode off.','success');}else showToast(d.message||'Unable to save preference.','error');}
+async function cancelRequest(id){const reason=await uiPrompt({title:'Cancel this request?',message:'Tell us why so we can improve matching (optional).',type:'select',options:['Found help elsewhere','Taking too long','Booked by mistake','Changed my mind','Other'],okText:'Cancel request'});if(reason==null)return;const d=await api('/api/service-request/'+id+'/cancel',{method:'POST',body:{reason}});if(d.success){showToast('Request cancelled.','success');setTimeout(()=>location.reload(),600);}else showToast(d.message||'Could not cancel this request.','error');}
 </script>
-<style>.smart-tools{margin:14px 0;display:grid;gap:14px}.tool-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.tool-card{border:1px solid var(--line);border-radius:16px;background:var(--card2);color:inherit;text-decoration:none;padding:13px;display:grid;gap:4px;text-align:left;font:inherit;cursor:pointer}.tool-card strong{font-size:11px}.tool-card small{color:var(--muted);font-size:8px}@media(max-width:700px){.tool-grid{grid-template-columns:1fr 1fr}}</style>
 {% endblock %}

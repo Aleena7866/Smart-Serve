@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="{{ preferred_language }}" data-theme="light">
+<html lang="{{ preferred_language or 'en' }}" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b73ff">
+<meta name="theme-color" content="#1a63f0">
+<meta name="description" content="SmartServe — verified local service professionals with live tracking, secure payments and safety tools.">
 <title>{% block title %}SmartServe{% endblock %}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7">
-<link rel="stylesheet" href="{{ url_for('static', filename='css/app-ui.css') }}?v=7">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app-ui.css') }}?v=8">
 {% if session.get('user_id') %}<script src="https://checkout.razorpay.com/v1/checkout.js" defer></script>{% endif %}
 {% block head %}{% endblock %}
 
@@ -19,61 +19,97 @@
 .drawer-overlay.open{opacity:1;visibility:visible;pointer-events:auto}
 .chat-drawer,.negotiation-drawer{width:min(460px,100vw);height:100dvh;background:var(--card);border-left:1px solid var(--line);box-shadow:-24px 0 70px rgba(0,0,0,.28);display:flex;flex-direction:column;transform:translateX(100%);transition:.25s ease}
 .drawer-overlay.open .chat-drawer,.drawer-overlay.open .negotiation-drawer{transform:translateX(0)}
-.drawer-head{padding:17px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}.peer{display:flex;align-items:center;gap:11px}.peer-avatar{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2c83ff,#7c5cff);color:#fff;font-weight:800}.peer-avatar.auction{background:linear-gradient(135deg,#ff6b9e,#7c5cff)}.drawer-head-actions{display:flex;gap:6px}.chat-context{display:flex;justify-content:space-between;padding:10px 18px;font-size:10px;color:var(--muted);border-bottom:1px solid var(--line)}
-.chat-messages{flex:1;overflow:auto;padding:18px 15px;display:flex;flex-direction:column;gap:10px;background:radial-gradient(circle at 20% 10%,rgba(49,123,255,.08),transparent 30%),var(--bg)}.chat-row{display:flex;justify-content:flex-start}.chat-row.mine{justify-content:flex-end}.chat-bubble{max-width:82%;padding:10px 12px;border-radius:17px 17px 17px 5px;background:var(--card2);border:1px solid var(--line);font-size:12px;line-height:1.45}.chat-row.mine .chat-bubble{border-radius:17px 17px 5px 17px;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;border:0}.chat-sender{font-size:9px;font-weight:800;opacity:.7;margin-bottom:3px}.chat-bubble small{display:block;font-size:8px;opacity:.55;margin-top:5px}.chat-composer{display:flex;gap:8px;padding:13px;border-top:1px solid var(--line);background:var(--card)}.chat-input{flex:1;border:1px solid var(--line);border-radius:18px;background:var(--card2);color:var(--text);padding:11px 14px;outline:none}.send-btn{width:43px;border:0;border-radius:15px;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;font-size:17px}.empty-chat{margin:auto;text-align:center;max-width:270px;display:grid;gap:6px;color:var(--muted);font-size:10px}.empty-chat strong{color:var(--text);font-size:13px}.empty-chat-icon{font-size:27px;margin-bottom:4px}.negotiation-drawer{width:min(500px,100vw)}.auction-status{margin:14px;border:1px solid var(--line);border-radius:16px;padding:12px;background:linear-gradient(135deg,rgba(255,104,154,.08),rgba(74,105,255,.08));display:grid;grid-template-columns:auto 1fr;column-gap:9px;align-items:center}.auction-status small{grid-column:2;color:var(--muted);font-size:9px}.auction-dot{width:10px;height:10px;border-radius:50%;background:#ffae32;box-shadow:0 0 0 5px rgba(255,174,50,.1);grid-row:1/3}.auction-dot.done{background:#1fc77a;box-shadow:0 0 0 5px rgba(31,199,122,.1)}.negotiation-history{flex:1;overflow:auto;padding:0 14px 14px;display:grid;align-content:start;gap:9px}.bid-card{padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--card2)}.bid-card.mine{margin-left:25px}.bid-card:not(.mine){margin-right:25px}.bid-card.accepted{border-color:rgba(31,199,122,.5);box-shadow:0 8px 25px rgba(31,199,122,.08)}.bid-head{display:flex;justify-content:space-between;gap:10px;font-size:10px}.bid-status{font-size:8px;color:var(--muted)}.bid-amount{font-size:23px;font-weight:800;margin:6px 0}.bid-message{font-size:10px;color:var(--muted);padding-bottom:7px}.bid-actions{display:flex;gap:6px;flex-wrap:wrap}.bid-actions button{font-size:9px;padding:8px 10px}.negotiation-composer{display:grid;gap:8px;padding:13px;border-top:1px solid var(--line);background:var(--card)}.amount-input{display:flex;align-items:center;border:1px solid var(--line);border-radius:14px;background:var(--card2);overflow:hidden}.amount-input span{padding-left:13px;color:var(--muted);font-weight:800}.amount-input input{flex:1;border:0;background:transparent;color:var(--text);padding:12px;outline:none}.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.profile-grid label{display:grid;gap:5px;font-size:10px;font-weight:700}.profile-grid .full{grid-column:1/-1}.profile-hero-row{display:flex;align-items:center;gap:14px;margin-bottom:20px}.profile-photo{width:76px;height:76px;border-radius:24px;object-fit:cover}.profile-photo.placeholder{display:grid;place-items:center;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;font-size:28px;font-weight:800}.profile-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.profile-badges span,.optional{font-size:8px;color:var(--muted);font-weight:600}.profile-badges span{padding:5px 8px;border:1px solid var(--line);border-radius:99px}.profile-note{display:flex;gap:9px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card2);margin:14px 0;font-size:9px}.profile-note span{color:var(--muted)}.provider-avatar-img{object-fit:cover;border-radius:18px}.match-note{padding:11px 13px;border:1px solid rgba(31,199,122,.25);border-radius:14px;background:rgba(31,199,122,.06);font-size:9px;color:var(--muted);margin-top:10px}
+.drawer-head{padding:17px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px}.peer{display:flex;align-items:center;gap:11px}.peer-avatar{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2c83ff,#7c5cff);color:#fff;font-weight:800}.peer-avatar.auction{background:linear-gradient(135deg,#ff6b9e,#7c5cff)}.drawer-head-actions{display:flex;gap:6px}.chat-context{display:flex;justify-content:space-between;padding:10px 18px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.chat-messages{flex:1;overflow:auto;padding:18px 15px;display:flex;flex-direction:column;gap:10px;background:radial-gradient(circle at 20% 10%,rgba(49,123,255,.08),transparent 30%),var(--bg)}.chat-row{display:flex;justify-content:flex-start}.chat-row.mine{justify-content:flex-end}.chat-bubble{max-width:82%;padding:10px 12px;border-radius:17px 17px 17px 5px;background:var(--card2);border:1px solid var(--line);font-size:13px;line-height:1.45}.chat-row.mine .chat-bubble{border-radius:17px 17px 5px 17px;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;border:0}.chat-sender{font-size:11px;font-weight:800;opacity:.7;margin-bottom:3px}.chat-bubble small{display:block;font-size:10px;opacity:.55;margin-top:5px}.chat-composer{display:flex;gap:8px;padding:13px;border-top:1px solid var(--line);background:var(--card)}.chat-input{flex:1;border:1px solid var(--line);border-radius:18px;background:var(--card2);color:var(--text);padding:11px 14px;outline:none;box-shadow:inset 0 2px 4px rgba(17,32,64,.06);transition:box-shadow .2s,border-color .2s}.chat-input:focus{border-color:var(--blue);box-shadow:0 0 0 4px color-mix(in srgb,var(--blue) 16%,transparent)}.send-btn{width:43px;border:0;border-radius:15px;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;font-size:17px}.empty-chat{margin:auto;text-align:center;max-width:270px;display:grid;gap:6px;color:var(--muted);font-size:12px}.empty-chat strong{color:var(--text);font-size:13px}.empty-chat-icon{font-size:27px;margin-bottom:4px}.negotiation-drawer{width:min(500px,100vw)}.auction-status{margin:14px;border:1px solid var(--line);border-radius:16px;padding:12px;background:linear-gradient(135deg,rgba(255,104,154,.08),rgba(74,105,255,.08));display:grid;grid-template-columns:auto 1fr;column-gap:9px;align-items:center}.auction-status small{grid-column:2;color:var(--muted);font-size:11px}.auction-dot{width:10px;height:10px;border-radius:50%;background:#ffae32;box-shadow:0 0 0 5px rgba(255,174,50,.1);grid-row:1/3}.auction-dot.done{background:#1fc77a;box-shadow:0 0 0 5px rgba(31,199,122,.1)}.negotiation-history{flex:1;overflow:auto;padding:0 14px 14px;display:grid;align-content:start;gap:9px}.bid-card{padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--card2)}.bid-card.mine{margin-left:25px}.bid-card:not(.mine){margin-right:25px}.bid-card.accepted{border-color:rgba(31,199,122,.5);box-shadow:0 8px 25px rgba(31,199,122,.08)}.bid-head{display:flex;justify-content:space-between;gap:10px;font-size:12px}.bid-status{font-size:10px;color:var(--muted)}.bid-amount{font-size:23px;font-weight:800;margin:6px 0}.bid-message{font-size:12px;color:var(--muted);padding-bottom:7px}.bid-actions{display:flex;gap:6px;flex-wrap:wrap}.bid-actions button{font-size:11px;padding:8px 10px}.negotiation-composer{display:grid;gap:8px;padding:13px;border-top:1px solid var(--line);background:var(--card)}.amount-input{display:flex;align-items:center;border:1px solid var(--line);border-radius:14px;background:var(--card2);overflow:hidden}.amount-input span{padding-left:13px;color:var(--muted);font-weight:800}.amount-input input{flex:1;border:0;background:transparent;color:var(--text);padding:12px;outline:none}.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.profile-grid label{display:grid;gap:5px;font-size:12px;font-weight:700}.profile-grid .full{grid-column:1/-1}.profile-hero-row{display:flex;align-items:center;gap:14px;margin-bottom:20px}.profile-photo{width:76px;height:76px;border-radius:24px;object-fit:cover}.profile-photo.placeholder{display:grid;place-items:center;background:linear-gradient(135deg,#1676ff,#6b55e8);color:#fff;font-size:28px;font-weight:800}.profile-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.profile-badges span,.optional{font-size:11px;color:var(--muted);font-weight:600}.profile-badges span{padding:5px 8px;border:1px solid var(--line);border-radius:99px}.profile-note{display:flex;gap:9px;padding:12px;border:1px solid var(--line);border-radius:14px;background:var(--card2);margin:14px 0;font-size:12px}.profile-note span{color:var(--muted)}.provider-avatar-img{object-fit:cover;border-radius:18px}.match-note{padding:11px 13px;border:1px solid rgba(31,199,122,.25);border-radius:14px;background:rgba(31,199,122,.06);font-size:12px;color:var(--muted);margin-top:10px}
 @media(max-width:650px){.chat-drawer,.negotiation-drawer{width:100vw}.profile-grid{grid-template-columns:1fr}.profile-grid .full{grid-column:auto}.chat-bubble{max-width:88%}}
 </style>
 <style>.low-bandwidth .map-card,.low-bandwidth .pin-map{min-height:140px}.low-bandwidth img{content-visibility:auto}.low-bandwidth .discovery-map{height:220px}.low-bandwidth .chat-messages{background:var(--bg)}.low-bandwidth .portfolio-card img{display:none}</style>
 </head>
-<body data-user-id="{{ session.get('user_id', 0) }}">
+<body data-user-id="{{ session.get('user_id', 0) }}" data-role="{{ session.get('role','') }}" class="{{ 'low-bandwidth' if low_bandwidth else '' }}">
+{% set role = session.get('role') %}
+{% set home_url = url_for('admin_operations') if role == 'admin' else (url_for('provider_dashboard') if role == 'provider' else url_for('customer_dashboard')) %}
+{% set ep = request.endpoint or '' %}
 <div class="app-shell">
   {% if session.get('user_id') %}
   <header class="topbar">
-    <a class="brand" href="{{ url_for('customer_dashboard') if session.get('role') == 'customer' else url_for('provider_dashboard') }}">
+    <a class="brand" href="{{ home_url }}" aria-label="SmartServe home">
       <span class="brand-icon">⌂</span><span>Smart<span>Serve</span></span>
     </a>
-    <nav class="desktop-nav">
-      {% if session.get('role') == 'customer' %}
-      <a href="{{ url_for('customer_dashboard') }}">Home</a>
-      <a href="#services">Services</a>
-      <a href="#bookings">Bookings</a>
-      <a href="{{ url_for('marketplace_features') }}">Safety & Tools</a>
+    <nav class="desktop-nav" aria-label="Primary">
+      {% if role == 'customer' %}
+      <a href="{{ url_for('customer_dashboard') }}" class="{{ 'active' if ep=='customer_dashboard' }}">Home</a>
+      <a href="{{ url_for('request_service') }}" class="{{ 'active' if ep=='request_service' }}">Book a service</a>
+      <a href="{{ url_for('customer_dashboard') }}#bookings">My bookings</a>
+      <a href="{{ url_for('marketplace_features') }}" class="{{ 'active' if ep=='marketplace_features' }}">Safety &amp; Tools</a>
+      {% elif role == 'provider' %}
+      <a href="{{ url_for('provider_dashboard') }}" class="{{ 'active' if ep=='provider_dashboard' }}">Requests</a>
+      <a href="{{ url_for('provider_profile_edit') }}" class="{{ 'active' if ep=='provider_profile_edit' }}">My profile</a>
+      <a href="{{ url_for('provider_earnings') }}" class="{{ 'active' if ep=='provider_earnings' }}">Earnings</a>
+      <a href="{{ url_for('marketplace_features') }}" class="{{ 'active' if ep=='marketplace_features' }}">Business Hub</a>
       {% else %}
-      <a href="{{ url_for('provider_dashboard') }}">Requests</a>
-      <a href="{{ url_for('provider_dashboard') }}#profile">Profile</a>
-      <a href="{{ url_for('marketplace_features') }}">Business Hub</a>
+      <a href="{{ url_for('admin_operations') }}" class="{{ 'active' if ep=='admin_operations' }}">Operations</a>
+      <a href="{{ url_for('marketplace_features') }}" class="{{ 'active' if ep=='marketplace_features' }}">Tools</a>
       {% endif %}
     </nav>
     <div class="top-actions">
-      <button class="icon-btn" type="button" onclick="toggleTheme()" title="Toggle theme"><span id="themeIcon">☾</span></button>
-      <a class="avatar-mini" href="{{ url_for('customer_dashboard') if session.get('role') == 'customer' else url_for('provider_dashboard') }}">{{ session.get('user_name','U')[:1]|upper }}</a>
+      <button class="icon-btn" type="button" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode"><span id="themeIcon">☾</span></button>
+      <div class="user-menu">
+        <button class="avatar-mini" type="button" onclick="toggleUserMenu(event)" aria-haspopup="menu" aria-expanded="false" title="Account">
+          {% set nav_photo = media_url(session.get('profile_photo_path')) %}
+          {% if nav_photo %}<img src="{{ nav_photo }}" alt="">{% else %}{{ session.get('user_name','U')[:1]|upper }}{% endif %}
+        </button>
+        <div class="user-dropdown" id="userDropdown" role="menu">
+          <div class="who"><strong>{{ session.get('user_name','Account') }}</strong>{{ role|capitalize }} account</div>
+          {% if role == 'provider' %}
+          <a role="menuitem" href="{{ url_for('provider_profile_edit') }}">👤 Profile &amp; verification</a>
+          <a role="menuitem" href="{{ url_for('provider_portfolio') }}">🖼️ Portfolio</a>
+          <a role="menuitem" href="{{ url_for('provider_reviews_center') }}">⭐ Reviews</a>
+          <a role="menuitem" href="{{ url_for('provider_earnings') }}">💰 Earnings</a>
+          {% elif role == 'customer' %}
+          <a role="menuitem" href="{{ url_for('customer_dashboard') }}#bookings">📋 My bookings</a>
+          <a role="menuitem" href="{{ url_for('marketplace_features') }}">🛡️ Safety &amp; Tools</a>
+          {% else %}
+          <a role="menuitem" href="{{ url_for('admin_operations') }}">🛰️ Operations</a>
+          {% endif %}
+          <a role="menuitem" href="{{ url_for('logout') }}">↩ Sign out</a>
+        </div>
+      </div>
     </div>
   </header>
   {% endif %}
 
   {% with messages = get_flashed_messages() %}
-    {% if messages %}<div class="flash-stack">{% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% if messages %}<div class="flash-stack" aria-live="polite">{% for message in messages %}
+      {% set lower = message|lower %}
+      <div class="flash {{ 'error' if ('not ' in lower or 'fail' in lower or 'invalid' in lower or 'could not' in lower or 'only ' in lower or 'must' in lower or 'unable' in lower or 'denied' in lower or 'rejected' in lower or 'wrong' in lower) else ('success' if ('success' in lower or 'saved' in lower or 'added' in lower or 'updated' in lower or 'ready' in lower or 'removed' in lower or 'acknowledged' in lower or 'welcome' in lower) else '') }}">
+        <span>{{ message }}</span><button type="button" aria-label="Dismiss" onclick="this.parentElement.remove()">×</button>
+      </div>{% endfor %}</div>{% endif %}
   {% endwith %}
 
   <main>{% block content %}{% endblock %}</main>
 
   {% if session.get('user_id') %}
-  <nav class="bottom-nav">
-    {% if session.get('role') == 'customer' %}
-      <a href="{{ url_for('customer_dashboard') }}" class="active"><span>⌂</span><small>Home</small></a>
-      <a href="#services"><span>▦</span><small>Services</small></a>
-      <a href="#bookings"><span>▤</span><small>Bookings</small></a>
-      <a href="#messages"><span>◌</span><small>Messages</small></a>
-      <a href="{{ url_for('logout') }}"><span>♙</span><small>Profile</small></a>
+  <nav class="bottom-nav" aria-label="Mobile">
+    {% if role == 'customer' %}
+      <a href="{{ url_for('customer_dashboard') }}" class="{{ 'active' if ep=='customer_dashboard' }}"><span>⌂</span><small>Home</small></a>
+      <a href="{{ url_for('request_service') }}" class="{{ 'active' if ep=='request_service' }}"><span>＋</span><small>Book</small></a>
+      <a href="{{ url_for('customer_dashboard') }}#bookings"><span>▤</span><small>Bookings</small></a>
+      <a href="{{ url_for('marketplace_features') }}" class="{{ 'active' if ep=='marketplace_features' }}"><span>🛡</span><small>Safety</small></a>
+      <a href="#" onclick="toggleUserMenu(event);return false;"><span>♙</span><small>Account</small></a>
+    {% elif role == 'provider' %}
+      <a href="{{ url_for('provider_dashboard') }}" class="{{ 'active' if ep=='provider_dashboard' }}"><span>⌂</span><small>Requests</small></a>
+      <a href="{{ url_for('provider_profile_edit') }}" class="{{ 'active' if ep=='provider_profile_edit' }}"><span>♙</span><small>Profile</small></a>
+      <a href="{{ url_for('provider_earnings') }}" class="{{ 'active' if ep=='provider_earnings' }}"><span>₹</span><small>Earnings</small></a>
+      <a href="{{ url_for('marketplace_features') }}" class="{{ 'active' if ep=='marketplace_features' }}"><span>▦</span><small>Hub</small></a>
+      <a href="{{ url_for('logout') }}"><span>↩</span><small>Sign out</small></a>
     {% else %}
-      <a href="{{ url_for('provider_dashboard') }}" class="active"><span>⌂</span><small>Home</small></a>
-      <a href="{{ url_for('provider_dashboard') }}#requests"><span>▤</span><small>Requests</small></a>
-      <a href="{{ url_for('provider_dashboard') }}#messages"><span>◌</span><small>Messages</small></a>
-      <a href="{{ url_for('logout') }}"><span>♙</span><small>Profile</small></a>
+      <a href="{{ url_for('admin_operations') }}" class="active"><span>🛰</span><small>Ops</small></a>
+      <a href="{{ url_for('logout') }}"><span>↩</span><small>Sign out</small></a>
     {% endif %}
   </nav>
   {% endif %}
 </div>
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
 {% if session.get('user_id') %}
 <div id="chatOverlay" class="drawer-overlay" onclick="if(event.target===this)closeChat()">
   <aside class="chat-drawer" role="dialog" aria-label="SmartServe chat">
@@ -103,32 +139,24 @@ function closeChat(){const o=document.getElementById('chatOverlay');if(o)o.class
 function renderChatMessage(m){const mine=Number(m.sender_id)===Number(document.body.dataset.userId||-1);return `<div class="chat-row ${mine?'mine':''}"><div class="chat-bubble"><div class="chat-sender">${mine?'You':escapeHtml(m.sender_name||'User')}</div><div>${escapeHtml(m.message)}</div><small>${escapeHtml(m.created_at||'')}</small></div></div>`;}
 window.appendChatMessage=function(m){if(!activeChatId||Number(m.request_id)!==Number(activeChatId))return;const box=document.getElementById('chatMessages');if(!box)return;if(box.querySelector('.empty-chat'))box.innerHTML='';box.insertAdjacentHTML('beforeend',renderChatMessage(m));box.scrollTop=box.scrollHeight;};
 async function loadChat(){if(!activeChatId)return;try{const d=await fetch('/api/chat/'+activeChatId,{cache:'no-store'}).then(r=>r.json());if(!d.success)throw Error(d.message);document.getElementById('chatTitle').textContent=d.other_party_name||'Service chat';document.getElementById('chatAvatar').textContent=(d.other_party_name||'S').slice(0,1).toUpperCase();const call=document.getElementById('chatCallButton');if(d.other_party_phone){call.style.display='inline-grid';call.onclick=()=>location.href='tel:'+d.other_party_phone;}else call.style.display='none';const box=document.getElementById('chatMessages');box.innerHTML=d.messages.length?d.messages.map(renderChatMessage).join(''):'<div class="empty-chat"><div class="empty-chat-icon">💬</div><strong>Start the conversation</strong><span>Discuss arrival, job details or anything the other side should know.</span></div>';box.scrollTop=box.scrollHeight;}catch(e){const box=document.getElementById('chatMessages');if(box)box.innerHTML='<div class="empty-chat"><strong>Unable to load chat</strong><span>'+escapeHtml(e.message||'Try again.')+'</span></div>';}}
-async function sendChat(e){e.preventDefault();const input=document.getElementById('chatInput');const msg=input.value.trim();if(!msg||!activeChatId)return;input.disabled=true;try{const r=await fetch('/api/chat/'+activeChatId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw Error(d.message||'Message could not be sent');input.value='';}catch(err){alert(err.message);}finally{input.disabled=false;input.focus();}}
+async function sendChat(e){e.preventDefault();const input=document.getElementById('chatInput');const msg=input.value.trim();if(!msg||!activeChatId)return;input.disabled=true;try{const r=await fetch('/api/chat/'+activeChatId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});const d=await r.json().catch(()=>({}));if(!r.ok||!d.success)throw Error(d.message||'Message could not be sent');input.value='';}catch(err){showToast(err.message,'error');}finally{input.disabled=false;input.focus();}}
 async function waitForRazorpay(timeoutMs=8000){const started=Date.now();while(!window.Razorpay&&Date.now()-started<timeoutMs){await new Promise(r=>setTimeout(r,150));}return !!window.Razorpay;}
-async function paySmartServe(requestId,button){if(!button)return;const original=button.textContent;button.disabled=true;button.textContent='Opening secure checkout…';try{const res=await fetch('/api/payment/order/'+encodeURIComponent(requestId),{method:'POST',headers:{'Content-Type':'application/json'}});const data=await res.json().catch(()=>({}));if(!res.ok||!data.success)throw Error(data.message||'Could not create the payment order.');if(!await waitForRazorpay())throw Error('Razorpay checkout did not load. Check your internet connection and RAZORPAY configuration.');const options={key:data.key_id,order_id:data.order_id,amount:data.amount,currency:data.currency,name:data.name,description:data.description,prefill:data.prefill||{},theme:{color:'#1269f5'},modal:{ondismiss:()=>{button.disabled=false;button.textContent=original;}},handler:async response=>{button.textContent='Verifying payment…';try{const verify=await fetch('/api/payment/verify/'+encodeURIComponent(requestId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(response)});const result=await verify.json().catch(()=>({}));if(!verify.ok||!result.success)throw Error(result.message||'Payment verification failed.');button.textContent='✓ Payment verified';setTimeout(()=>location.reload(),700);}catch(err){button.disabled=false;button.textContent=original;alert(err.message);}}};const checkout=new window.Razorpay(options);checkout.on('payment.failed',response=>{button.disabled=false;button.textContent=original;alert((response.error&&response.error.description)||'Payment failed. Please try again.');});checkout.open();}catch(err){button.disabled=false;button.textContent=original;alert(err.message);}}
+async function paySmartServe(requestId,button){if(!button)return;const original=button.textContent;button.disabled=true;button.textContent='Opening secure checkout…';try{const res=await fetch('/api/payment/order/'+encodeURIComponent(requestId),{method:'POST',headers:{'Content-Type':'application/json'}});const data=await res.json().catch(()=>({}));if(!res.ok||!data.success)throw Error(data.message||'Could not create the payment order.');if(!await waitForRazorpay())throw Error('Razorpay checkout did not load. Check your internet connection and RAZORPAY configuration.');const options={key:data.key_id,order_id:data.order_id,amount:data.amount,currency:data.currency,name:data.name,description:data.description,prefill:data.prefill||{},theme:{color:'#1269f5'},modal:{ondismiss:()=>{button.disabled=false;button.textContent=original;}},handler:async response=>{button.textContent='Verifying payment…';try{const verify=await fetch('/api/payment/verify/'+encodeURIComponent(requestId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(response)});const result=await verify.json().catch(()=>({}));if(!verify.ok||!result.success)throw Error(result.message||'Payment verification failed.');button.textContent='✓ Payment verified';setTimeout(()=>location.reload(),700);}catch(err){button.disabled=false;button.textContent=original;showToast(err.message,'error');}}};const checkout=new window.Razorpay(options);checkout.on('payment.failed',response=>{button.disabled=false;button.textContent=original;showToast((response.error&&response.error.description)||'Payment failed. Please try again.','error');});checkout.open();}catch(err){button.disabled=false;button.textContent=original;showToast(err.message,'error');}}
 function openNegotiation(id){negotiationRequestId=Number(id);window.negotiationRequestId=negotiationRequestId;const o=document.getElementById('negotiationOverlay');if(o)o.classList.add('open');if(window.smartSocket)window.smartSocket.emit('join_request',{request_id:negotiationRequestId});loadNegotiation();}
 function closeNegotiation(){const o=document.getElementById('negotiationOverlay');if(o)o.classList.remove('open');negotiationRequestId=null;window.negotiationRequestId=null;}
 window.loadNegotiation=async function loadNegotiation(){if(!negotiationRequestId)return;const box=document.getElementById('negotiationHistory');try{const d=await fetch('/api/negotiation/'+negotiationRequestId,{cache:'no-store'}).then(r=>r.json());if(!d.success)throw Error(d.message);const current=Number(document.body.dataset.userId||-1);const accepted=d.negotiations.find(n=>n.status==='ACCEPTED');const status=document.getElementById('auctionStatus');if(accepted){status.innerHTML=`<span class="auction-dot done"></span><strong>✓ Final amount agreed: ₹${Number(accepted.proposed_amount).toLocaleString('en-IN')}</strong><small>Both customer and provider have the same locked price.</small>`;document.querySelector('.negotiation-composer').style.display='none';}else{status.innerHTML='<span class="auction-dot"></span><strong>Open negotiation</strong><small>Each side can counter. Accept the other side’s offer to finalize.</small>';document.querySelector('.negotiation-composer').style.display='grid';}box.innerHTML=d.negotiations.length?d.negotiations.map(n=>`<div class="bid-card ${Number(n.sender_user_id)===current?'mine':''} ${n.status==='ACCEPTED'?'accepted':''}"><div class="bid-head"><strong>${Number(n.sender_user_id)===current?'You':escapeHtml(n.sender_name)}</strong><span class="bid-status">${escapeHtml(n.status)}</span></div><div class="bid-amount">₹${Number(n.proposed_amount).toLocaleString('en-IN')}</div>${n.message?`<div class="bid-message">${escapeHtml(n.message)}</div>`:''}${n.status==='PENDING'&&Number(n.sender_user_id)!==current?`<div class="bid-actions"><button class="primary-btn" onclick="actNegotiation(${n.id},'accept')">✓ Accept ₹${Number(n.proposed_amount).toLocaleString('en-IN')}</button><button class="outline-btn" onclick="actNegotiation(${n.id},'reject')">Counter / reject</button></div>`:''}</div>`).join(''):'<div class="empty-chat"><div class="empty-chat-icon">🤝</div><strong>No offers yet</strong><span>Start with a fair price and let the other side respond.</span></div>';box.scrollTop=box.scrollHeight;}catch(e){box.innerHTML='<div class="empty-chat"><strong>Unable to load negotiation</strong><span>'+escapeHtml(e.message)+'</span></div>';}}
-async function sendNegotiation(e){e.preventDefault();if(!negotiationRequestId)return;const amount=Number(document.getElementById('negotiationAmount').value),msg=document.getElementById('negotiationMessage').value.trim();const r=await fetch('/api/negotiation/'+negotiationRequestId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,message:msg})});const d=await r.json();if(!d.success)return alert(d.message);document.getElementById('negotiationAmount').value='';document.getElementById('negotiationMessage').value='';loadNegotiation();}
-async function actNegotiation(id,action){const r=await fetch('/api/negotiation/'+negotiationRequestId+'/'+id+'/'+action,{method:'POST'});const d=await r.json();if(!d.success)alert(d.message);else{loadNegotiation();setTimeout(()=>location.reload(),500);}}
-async function callSmartServe(phone,name){
-  phone=String(phone||'').trim(); name=String(name||'the other party');
-  if(!phone){alert(name+' has not added a mobile number yet.');return;}
-  try{
-    const digits=phone.replace(/[^0-9+]/g,'');
-    if(!digits){throw new Error('No valid phone number is available.');}
-    // On phones/tablets this opens the native dialer. On desktop Linux/Windows
-    // it opens the OS/browser telephony handler if one is configured.
-    const a=document.createElement('a');a.href='tel:'+digits;a.rel='nofollow';document.body.appendChild(a);a.click();a.remove();
-  }catch(e){
-    try{await navigator.clipboard.writeText(phone);alert('Call handler is not available on this device. '+name+'\'s number was copied: '+phone);}catch(_){alert('Call '+name+' at '+phone);}
-  }
-}
+async function sendNegotiation(e){e.preventDefault();if(!negotiationRequestId)return;const amount=Number(document.getElementById('negotiationAmount').value),msg=document.getElementById('negotiationMessage').value.trim();const r=await fetch('/api/negotiation/'+negotiationRequestId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,message:msg})});const d=await r.json();if(!d.success)return showToast(d.message,'error');document.getElementById('negotiationAmount').value='';document.getElementById('negotiationMessage').value='';loadNegotiation();}
+async function actNegotiation(id,action){const r=await fetch('/api/negotiation/'+negotiationRequestId+'/'+id+'/'+action,{method:'POST'});const d=await r.json();if(!d.success)showToast(d.message,'error');else{loadNegotiation();setTimeout(()=>location.reload(),500);}}
 function toggleTheme(){const root=document.documentElement,next=root.dataset.theme==='dark'?'light':'dark';root.dataset.theme=next;localStorage.setItem('smartServeTheme',next);const i=document.getElementById('themeIcon');if(i)i.textContent=next==='dark'?'☀':'☾';}
 (function(){const t=localStorage.getItem('smartServeTheme')||'light';document.documentElement.dataset.theme=t;const i=document.getElementById('themeIcon');if(i)i.textContent=t==='dark'?'☀':'☾';})();
+function toggleUserMenu(e){if(e){e.preventDefault();e.stopPropagation();}const d=document.getElementById('userDropdown');if(!d)return;const open=!d.classList.contains('open');d.classList.toggle('open',open);const b=document.querySelector('.avatar-mini');if(b)b.setAttribute('aria-expanded',String(open));}
+document.addEventListener('click',e=>{const d=document.getElementById('userDropdown');if(d&&d.classList.contains('open')&&!e.target.closest('.user-menu'))d.classList.remove('open');});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.getElementById('userDropdown')?.classList.remove('open');}});
+setTimeout(()=>document.querySelectorAll('.flash-stack .flash').forEach(f=>{f.style.transition='opacity .4s';f.style.opacity='0';setTimeout(()=>f.remove(),450);}),6500);
 </script>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
-<script src="https://cdn.socket.io/4.8.1/socket.io.min.js" crossorigin="anonymous"></script>
-<script src="{{ url_for('static', filename='js/realtime.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}?v=8"></script>
+<script src="{{ url_for('static', filename='js/realtime.js') }}?v=8" defer></script>
 {% block scripts %}{% endblock %}
 

@@ -1,30 +1,121 @@
 {% extends "base.html" %}
-{% block title %}SmartServe | Provider Profile{% endblock %}
+{% block title %}SmartServe · Profile & verification{% endblock %}
+{% block head %}
+<style>
+.profile-layout{display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start}
+.photo-block{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.photo-frame{position:relative;width:104px;height:104px;flex:none}
+.photo-frame img,.photo-frame .profile-photo{width:104px;height:104px;border-radius:30px;object-fit:cover;box-shadow:var(--shadow)}
+.photo-frame .profile-photo.placeholder{display:grid;place-items:center;background:linear-gradient(135deg,#1a63f0,#6b55e8);color:#fff;font-size:38px;font-weight:800}
+.photo-frame .cam{position:absolute;right:-6px;bottom:-6px;width:34px;height:34px;border-radius:12px;display:grid;place-items:center;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow-sm);cursor:pointer;font-size:15px}
+.photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.side-card h3{font-size:15px;margin:0 0 10px}
+.check-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.check-list li{display:flex;gap:10px;align-items:center;font-size:13px;color:var(--text-2)}
+.check-list .ok{color:var(--green)} .check-list .todo{color:var(--muted)}
+.kyc-status{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:12px;font-weight:800;font-size:12px}
+.kyc-status.VERIFIED{background:var(--green-soft);color:var(--green)} .kyc-status.SUBMITTED{background:var(--yellow-soft);color:#9a6300} .kyc-status.REJECTED{background:var(--red-soft);color:var(--red)} .kyc-status.NOT_SUBMITTED{background:var(--card3);color:var(--muted)}
+@media(max-width:900px){.profile-layout{grid-template-columns:1fr}}
+</style>
+{% endblock %}
 {% block content %}
+{% set photo = media_url(provider['profile_photo_path']) %}
+{% set kyc = (provider['ekyc_status'] or 'NOT_SUBMITTED')|upper %}
+{% set checks = [('Profile photo', photo is not none), ('Mobile number', provider['phone'] is not none and provider['phone'] != ''), ('Services selected', selected_service_ids|length > 0), ('About you', provider['bio'] is not none and provider['bio'] != ''), ('Identity document', kyc in ['SUBMITTED','VERIFIED'])] %}
+{% set done = checks|selectattr(1)|list|length %}
 <div class="page profile-page">
-  <div class="greeting"><div><div class="eyebrow">PROFESSIONAL PROFILE</div><h1>Your provider profile</h1><div class="muted">Build trust before the first job. Every field below is optional.</div></div><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">← Dashboard</a></div>
-  <form class="profile-editor form-card" method="post" enctype="multipart/form-data">
-    <div class="profile-hero-row">
-      <div class="profile-photo-wrap">
-        {% if provider['profile_photo_path'] %}<img class="profile-photo" src="{{ url_for('static', filename=provider['profile_photo_path']) }}" alt="Profile photo">{% else %}<div class="profile-photo placeholder">{{ provider['name'][:1]|upper }}</div>{% endif %}
-      </div>
-      <div><h2>{{ provider['name'] }}</h2><div class="muted">{{ provider['email'] }}</div><div class="profile-badges"><span>★ {{ '%.1f'|format(provider['rating'] or 0) }}</span><span>{{ provider['experience'] or 0 }} yrs</span><span>{{ provider['ekyc_status'] or 'NOT_SUBMITTED' }}</span></div></div>
-    </div>
-    <div class="profile-grid">
-      <label>Name<input class="input" name="name" value="{{ provider['name'] or '' }}"></label>
-      <label>Mobile number <span class="optional">optional</span><input class="input" name="phone" inputmode="tel" value="{{ provider['phone'] or '' }}" placeholder="+91 …"></label>
-      <label class="full">Services offered <span class="optional">optional · select all that apply</span>
-        <div class="profile-service-picker">
-          {% for service in services %}<label class="service-option"><input type="checkbox" name="service_ids" value="{{ service['id'] }}" {% if service['id'] in selected_service_ids %}checked{% endif %}><span><strong>{{ service['name'] }}</strong><small>{{ service['description'] or '' }}</small></span></label>{% endfor %}
+  <div class="greeting reveal">
+    <div><span class="eyebrow">Business Hub · Profile & verification</span><h1>Your provider profile</h1><div class="muted">This is what customers see when they choose a provider. A complete, verified profile wins more jobs.</div></div>
+    <div class="row"><a class="outline-btn" href="{{ url_for('provider_profile', provider_id=provider['id']) }}" target="_blank" rel="noopener">👁 Preview public profile</a><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">← Dashboard</a></div>
+  </div>
+
+  <div class="profile-layout">
+    <form class="form-card reveal" method="post" enctype="multipart/form-data" id="profileForm" data-no-busy onsubmit="return submitProfile(event)">
+      <div class="photo-block">
+        <div class="photo-frame">
+          {% if photo %}<img id="photoPreview" class="profile-photo" src="{{ photo }}" alt="{{ provider['name'] }}" data-initial="{{ provider['name'][:1]|upper }}">{% else %}<div id="photoPreview" class="profile-photo placeholder">{{ provider['name'][:1]|upper }}</div>{% endif %}
+          <label class="cam" title="Change photo" for="photoInput">📷</label>
         </div>
-      </label>
-      <label>Experience in years <span class="optional">optional</span><input class="input" type="number" min="0" max="60" name="experience" value="{{ provider['experience'] or 0 }}"></label>
-      <label class="full">About you <span class="optional">optional</span><textarea class="input" name="bio" rows="4" placeholder="Tell customers about your experience, service area and strengths.">{{ provider['bio'] or '' }}</textarea></label>
-      <label>Profile picture <span class="optional">optional</span><input class="input" type="file" name="profile_photo" accept="image/*"><small class="muted">JPG, PNG or WebP · max 5 MB</small></label>
-      <label>eKYC document <span class="optional">optional</span><input class="input" type="file" name="ekyc_document" accept="image/*,.pdf"><small class="muted">Stored privately; not exposed as a public URL.</small></label>
-    </div>
-    <div class="profile-note"><strong>🔒 Privacy</strong><span>eKYC is optional for now. We store the document privately and do not show it to customers.</span></div>
-    <button class="primary-btn" type="submit">Save profile</button>
-  </form>
+        <div style="flex:1;min-width:220px">
+          <h2 style="margin:0">{{ provider['name'] }}</h2>
+          <div class="muted">{{ provider['email'] }}</div>
+          <div class="badge-row" style="margin-top:8px">
+            <span class="chip yellow">★ {{ '%.1f'|format(provider['rating'] or 0) }}</span>
+            <span class="chip">{{ provider['experience'] or 0 }} yrs experience</span>
+            {% for b in badges %}<span class="badge">✓ {{ b['label'] }}</span>{% endfor %}
+          </div>
+          <div class="photo-actions">
+            <label class="outline-btn btn-sm" for="photoInput">Upload new photo</label>
+            <input id="photoInput" type="file" name="profile_photo" accept="image/jpeg,image/png,image/webp" style="display:none">
+            {% if photo %}<button type="button" class="ghost-btn btn-sm" onclick="removePhoto()">Remove photo</button>{% endif %}
+            <input type="hidden" name="remove_photo" id="removePhoto" value="0">
+          </div>
+          <div class="muted" style="font-size:11.5px;margin-top:6px" id="photoHint">JPG, PNG or WEBP · up to 5 MB · shown to customers on search, chat and tracking.</div>
+        </div>
+      </div>
+
+      <div class="profile-grid">
+        <label>Full name<input class="input" name="name" value="{{ provider['name'] or '' }}" required maxlength="120"></label>
+        <label>Mobile number <span class="optional">customers can call you after booking</span><input class="input" name="phone" inputmode="tel" value="{{ provider['phone'] or '' }}" placeholder="+91 98765 43210" maxlength="30"></label>
+        <label>Experience in years<input class="input" type="number" min="0" max="60" name="experience" value="{{ provider['experience'] or 0 }}"></label>
+        <label>Identity status<div><span class="kyc-status {{ kyc }}">{% if kyc=='VERIFIED' %}✓ Verified{% elif kyc=='SUBMITTED' %}⏳ Under review{% elif kyc=='REJECTED' %}✕ Rejected — upload again{% else %}Not submitted{% endif %}</span></div></label>
+        <label class="full">About you <span class="optional">shown on your public profile</span><textarea class="input" name="bio" rows="4" maxlength="1000" placeholder="Tell customers about your experience, service area, tools you bring and what you are best at.">{{ provider['bio'] or '' }}</textarea></label>
+      </div>
+
+      <div style="margin-top:18px">
+        <h3 style="margin:0 0 2px">Services you offer</h3>
+        <p class="muted" style="margin-bottom:8px">You only receive requests for the services selected here.</p>
+        {% include '_skill_picker.html' %}
+      </div>
+
+      <div style="margin-top:12px">
+        <h3 style="margin:0 0 2px">Identity verification (eKYC)</h3>
+        <p class="muted" style="margin-bottom:8px">Upload a government ID (Aadhaar, PAN, driving licence or passport). Reviewed by the operations team; never shown to customers.</p>
+        <label class="dropzone" for="ekycInput"><span class="big">🪪</span><strong id="ekycName">{% if kyc in ['SUBMITTED','VERIFIED'] %}Document on file — upload again to replace{% else %}Choose ID document{% endif %}</strong><span>JPG, PNG, WEBP or PDF · max 5 MB · stored privately</span><input id="ekycInput" type="file" name="ekyc_document" accept="image/jpeg,image/png,image/webp,.pdf"></label>
+      </div>
+
+      <div class="notice info" style="margin-top:16px"><span>🔒</span><span>Your phone number is only shared with customers whose booking you have accepted. Identity documents are stored outside the public folder.</span></div>
+      <div class="action-row"><button class="primary-btn btn-lg" type="submit" id="saveBtn">Save profile</button><a class="outline-btn btn-lg" href="{{ url_for('provider_portfolio') }}">Manage portfolio →</a></div>
+    </form>
+
+    <aside class="stack">
+      <div class="form-card side-card reveal">
+        <h3>Profile strength</h3>
+        <div class="row space-between" style="margin-bottom:6px"><strong style="font-size:22px">{{ (100 * done / checks|length)|round|int }}%</strong><span class="muted">{{ done }} of {{ checks|length }} complete</span></div>
+        <div class="progress"><span style="width:{{ (100 * done / checks|length)|round|int }}%"></span></div>
+        <ul class="check-list" style="margin-top:12px">
+          {% for label, ok in checks %}<li><span class="{{ 'ok' if ok else 'todo' }}">{{ '✓' if ok else '○' }}</span>{{ label }}</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="form-card side-card reveal">
+        <h3>Business Hub</h3>
+        <div class="stack" style="gap:8px">
+          <a class="outline-btn" href="{{ url_for('provider_portfolio') }}" style="justify-content:space-between">🖼️ Portfolio <span>→</span></a>
+          <a class="outline-btn" href="{{ url_for('provider_reviews_center') }}" style="justify-content:space-between">⭐ Reviews <span>→</span></a>
+          <a class="outline-btn" href="{{ url_for('provider_earnings') }}" style="justify-content:space-between">💰 Earnings <span>→</span></a>
+          <a class="outline-btn" href="{{ url_for('marketplace_features') }}" style="justify-content:space-between">🧰 More tools <span>→</span></a>
+        </div>
+      </div>
+    </aside>
+  </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var input=document.getElementById('photoInput'),hint=document.getElementById('photoHint');
+  input.addEventListener('change',function(){
+    var f=input.files&&input.files[0]; if(!f) return;
+    if(!/^image\/(jpeg|png|webp)$/i.test(f.type)){showToast('Only JPG, PNG or WEBP images are allowed.','error');input.value='';return;}
+    if(f.size>5*1024*1024){showToast('Image must be smaller than 5 MB.','error');input.value='';return;}
+    var url=URL.createObjectURL(f),prev=document.getElementById('photoPreview');
+    if(prev.tagName!=='IMG'){var img=document.createElement('img');img.id='photoPreview';img.className='profile-photo';prev.replaceWith(img);prev=img;}
+    prev.src=url; document.getElementById('removePhoto').value='0'; hint.textContent='New photo selected: '+f.name+' — click Save profile to apply.';
+  });
+  var ekyc=document.getElementById('ekycInput');
+  ekyc.addEventListener('change',function(){var f=ekyc.files&&ekyc.files[0];if(!f)return;if(!/\.(jpe?g|png|webp|pdf)$/i.test(f.name)){showToast('Use a JPG, PNG, WEBP or PDF file.','error');ekyc.value='';return;}if(f.size>5*1024*1024){showToast('Document must be smaller than 5 MB.','error');ekyc.value='';return;}document.getElementById('ekycName').textContent=f.name;});
+})();
+async function removePhoto(){if(!(await uiConfirm({title:'Remove profile photo?',message:'Customers will see your initial instead until you upload a new photo.',okText:'Remove',danger:true})))return;document.getElementById('removePhoto').value='1';document.getElementById('photoInput').value='';var prev=document.getElementById('photoPreview');var div=document.createElement('div');div.id='photoPreview';div.className='profile-photo placeholder';div.textContent='{{ provider['name'][:1]|upper }}';prev.replaceWith(div);document.getElementById('photoHint').textContent='Photo will be removed when you save.';}
+function submitProfile(e){if(typeof skillPickerValidate==='function'&&!skillPickerValidate()){e.preventDefault();showToast('Select at least one service you offer.','error');return false;}var b=document.getElementById('saveBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span> Saving…';return true;}
+</script>
 {% endblock %}

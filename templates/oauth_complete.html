@@ -1,8 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Complete Smart Serve Sign In</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-<style>body{min-height:100vh;display:grid;place-items:center;padding:24px}.oauth-card{max-width:520px;width:100%;padding:32px;border-radius:28px;background:rgba(255,255,255,.08);border:1px solid rgba(120,150,220,.25);box-shadow:0 20px 60px rgba(0,0,0,.2)}.oauth-card h1{margin:0 0 8px}.oauth-card p{color:#8fa4c7}.role-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:22px 0}.role-option{padding:18px;border-radius:18px;border:1px solid rgba(120,150,220,.25);background:rgba(255,255,255,.05)}.role-option input{margin-right:8px}.oauth-card input[type=text],.oauth-card input[type=number]{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(120,150,220,.25);background:rgba(255,255,255,.06);color:inherit;margin-top:7px;margin-bottom:14px}.continue{width:100%;border:0;border-radius:14px;padding:14px;background:#1769ff;color:#fff;font-weight:800}</style>
-</head><body><section class="oauth-card"><div>🔐 Secure Google session</div><h1>Finish your Smart Serve account</h1><p>Signed in as <strong>{{ pending.name }}</strong> ({{ pending.email }}). Choose how you will use Smart Serve.</p><form method="POST"><div class="role-grid"><label class="role-option"><input type="radio" name="role" value="customer" checked onchange="toggleProvider(false)">Customer<br><small>Book local services</small></label><label class="role-option"><input type="radio" name="role" value="provider" onchange="toggleProvider(true)">Provider<br><small>Offer your skills</small></label></div><div id="providerFields" style="display:none"><label>Skills</label><input type="text" name="skills" placeholder="Plumbing, Electrical"><label>Experience (years)</label><input type="number" name="experience" min="0" max="60" value="0"></div><button class="continue" type="submit">Continue to Smart Serve →</button></form></section><script>function toggleProvider(v){document.getElementById('providerFields').style.display=v?'block':'none'}</script></body></html>
+{% extends "base.html" %}
+{% block title %}SmartServe · Finish your account{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card reveal" style="width:min(720px,100%)">
+    <div class="row space-between">
+      <a class="brand" href="{{ url_for('home') }}"><span class="brand-icon">⌂</span><span>Smart<span>Serve</span></span></a>
+      <span class="chip green">🔐 Secure Google session</span>
+    </div>
+    <h1 style="margin-top:16px">Finish your SmartServe account</h1>
+    <p>Signed in as <strong>{{ pending.name }}</strong> ({{ pending.email }}). Choose how you will use SmartServe.</p>
+    <form method="POST" id="oauthForm" onsubmit="return validateOauth(event)" data-no-busy>
+      <div class="role-switch">
+        <label class="role-option"><input type="radio" name="role" value="customer" checked onchange="toggleProvider(false)"><span class="role-body"><span class="big">👤</span><strong>Get help</strong><span>Book trusted local professionals</span></span></label>
+        <label class="role-option"><input type="radio" name="role" value="provider" onchange="toggleProvider(true)"><span class="role-body"><span class="big">🧑‍🔧</span><strong>Offer my skills</strong><span>Earn as a service provider</span></span></label>
+      </div>
+      <div id="providerFields" style="display:none;padding-top:12px;border-top:1px dashed var(--line)">
+        <span class="eyebrow">Provider details</span>
+        <h3 style="margin:6px 0 2px">Which services do you offer?</h3>
+        <p class="muted" style="margin-bottom:10px">Pick every service you can deliver. You can change this any time from your profile.</p>
+        {% include '_skill_picker.html' %}
+        <label class="field" style="max-width:260px"><span style="font-size:12px;font-weight:800;display:block;margin:6px 0 4px">Years of experience <span class="optional">(optional)</span></span><input class="input" type="number" name="experience" min="0" max="60" value="0"></label>
+      </div>
+      <button class="primary-btn btn-block btn-lg" type="submit" id="oauthButton" style="margin-top:14px">Continue to SmartServe →</button>
+    </form>
+  </div>
+</div>
+<script>
+function toggleProvider(v){document.getElementById('providerFields').style.display=v?'block':'none';}
+function validateOauth(e){var role=(document.querySelector('input[name=role]:checked')||{}).value;if(role==='provider'&&typeof skillPickerValidate==='function'&&!skillPickerValidate()){e.preventDefault();return false;}var b=document.getElementById('oauthButton');b.disabled=true;b.innerHTML='<span class="spinner"></span> Setting up…';return true;}
+</script>
+{% endblock %}

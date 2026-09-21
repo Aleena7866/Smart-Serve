@@ -32,8 +32,15 @@ from flask import (
     redirect,
     url_for,
     session,
-    flash
+    flash,
+    abort,
+    send_from_directory
 )
+
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None
 
 from werkzeug.security import (
     generate_password_hash,
@@ -244,17 +251,154 @@ razorpay_client = (
     else None
 )
 
-UPLOAD_FOLDER = "static/uploads"
-PRIVATE_UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "private_uploads")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Public media (profile photos, portfolio, request photos) lives OUTSIDE the
+# static folder and is served through /media/<file> so that private files
+# (completion proofs, verification photos) are never exposed by Flask static.
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+LEGACY_UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+PRIVATE_UPLOAD_FOLDER = os.path.join(BASE_DIR, "private_uploads")
 os.makedirs(PRIVATE_UPLOAD_FOLDER, exist_ok=True)
 app.config["PRIVATE_UPLOAD_FOLDER"] = PRIVATE_UPLOAD_FOLDER
 
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 ALLOWED_DOCUMENT_EXTENSIONS = ALLOWED_EXTENSIONS | {"pdf"}
+PRIVATE_MEDIA_PREFIXES = ("completion_", "verification_", "ekyc_")
 
-app.config["UPLOAD_FOLDER"] = os.getenv("SMARTSERVE_UPLOAD_FOLDER", UPLOAD_FOLDER)
+app.config["UPLOAD_FOLDER"] = os.path.abspath(os.getenv("SMARTSERVE_UPLOAD_FOLDER") or UPLOAD_FOLDER)
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
+
+
+def _media_dirs():
+    """Directories searched for uploaded media (current + legacy static/uploads)."""
+    dirs = [app.config["UPLOAD_FOLDER"]]
+    if os.path.isdir(LEGACY_UPLOAD_FOLDER) and os.path.abspath(LEGACY_UPLOAD_FOLDER) not in [os.path.abspath(d) for d in dirs]:
+        dirs.append(LEGACY_UPLOAD_FOLDER)
+    return dirs
+
+
+def _media_basename(path):
+    if not path:
+        return None
+    name = os.path.basename(str(path).replace("\\", "/").strip())
+    if not name or name in (".", "..") or "/" in name:
+        return None
+    return name
+
+
+def _find_media(path):
+    """Return the absolute file path for a stored media reference, or None."""
+    name = _media_basename(path)
+    if not name:
+        return None
+    for directory in _media_dirs():
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def media_url(path, fallback=None):
+    """Template helper: public URL for an uploaded image, or fallback when missing."""
+    if not path:
+        return fallback
+    value = str(path)
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    name = _media_basename(value)
+    if not name or name.lower().startswith(PRIVATE_MEDIA_PREFIXES):
+        return fallback
+    if _find_media(name):
+        return url_for("media_file", filename=name)
+    return fallback
+
+
+app.jinja_env.globals["media_url"] = media_url
+
+
+@app.route("/media/<path:filename>")
+def media_file(filename):
+    name = _media_basename(filename)
+    if not name or not allowed_file(name) or name.lower().startswith(PRIVATE_MEDIA_PREFIXES):
+        abort(404)
+    for directory in _media_dirs():
+        if os.path.isfile(os.path.join(directory, name)):
+            return send_from_directory(directory, name, max_age=86400, conditional=True)
+    abort(404)
+
+
+def _validate_image_upload(file_storage):
+    """Ensure an upload is a real JPG/PNG/WEBP image. Returns the extension."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError("Choose an image to upload.")
+    if not allowed_file(file_storage.filename):
+        raise ValueError("Only JPG, JPEG, PNG and WEBP images are allowed.")
+    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    stream = file_storage.stream
+    try:
+        stream.seek(0)
+        if PILImage is not None:
+            img = PILImage.open(stream)
+            img.verify()
+            fmt = (img.format or "").lower()
+            if fmt not in ("jpeg", "png", "webp"):
+                raise ValueError("Unsupported image format.")
+            ext = {"jpeg": "jpg", "png": "png", "webp": "webp"}[fmt]
+        else:
+            head = stream.read(16)
+            if not (head.startswith(b"\xff\xd8") or head.startswith(b"\x89PNG") or head[:4] == b"RIFF" and head[8:12] == b"WEBP"):
+                raise ValueError("The file is not a valid image.")
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("The file could not be read as an image. Upload a JPG, PNG or WEBP photo.")
+    finally:
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+    return ext
+
+
+def _save_public_image(file_storage, prefix):
+    """Validate and store a public image. Returns the relative DB path 'uploads/<name>'."""
+    ext = _validate_image_upload(file_storage)
+    filename = secure_filename(f"{prefix}_{uuid.uuid4().hex}.{ext}")
+    os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    file_storage.stream.seek(0)
+    file_storage.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+    return "uploads/" + filename
+
+
+def _delete_media(path):
+    target = _find_media(path)
+    if target:
+        try:
+            os.remove(target)
+        except OSError:
+            pass
+
+
+def _with_photo_urls(providers):
+    for p in providers or []:
+        if isinstance(p, dict):
+            p["photo_url"] = media_url(p.get("profile_photo_path"))
+    return providers
+
+
+def _grouped_services(connection):
+    rows = connection.execute(
+        "SELECT id,name,description,category,icon,sort_order FROM services ORDER BY COALESCE(sort_order,100), name"
+    ).fetchall()
+    groups, order = {}, []
+    for row in rows:
+        category = row["category"] or "Other Services"
+        if category not in groups:
+            groups[category] = []
+            order.append(category)
+        groups[category].append(dict(row))
+    return [{"name": category, "services": groups[category]} for category in order]
 
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", logger=False, engineio_logger=False) if SocketIO else None
 
@@ -286,7 +430,9 @@ if socketio:
     def socket_connect():
         if session.get("user_id"):
             join_room(f"user:{int(session['user_id'])}")
-            emit("socket_ready", {"user_id": session["user_id"]})
+            if session.get("role") == "admin":
+                join_room("admins")
+            emit("socket_ready", {"user_id": session["user_id"], "role": session.get("role")})
 
     @socketio.on("join_request")
     def socket_join_request(data):
@@ -361,7 +507,15 @@ def _sync_provider_services(connection, provider_id, service_ids):
 
 @app.route("/")
 def home():
-    return render_template("index.html")
+    connection = get_db_connection()
+    services = connection.execute("SELECT id,name,icon,category,description FROM services ORDER BY COALESCE(sort_order,100), name").fetchall()
+    counts = {
+        "providers": connection.execute("SELECT COUNT(*) c FROM providers WHERE approved=1").fetchone()["c"],
+        "completed": connection.execute("SELECT COUNT(*) c FROM service_requests WHERE status='COMPLETED'").fetchone()["c"],
+        "reviews": connection.execute("SELECT COUNT(*) c FROM reviews").fetchone()["c"],
+    }
+    connection.close()
+    return render_template("index.html", services=services, counts=counts)
 
 
 @app.route("/health")
@@ -382,10 +536,14 @@ def _start_session(user):
     session["role"] = user["role"]
     session["email"] = user["email"]
     session["auth_provider"] = user["auth_provider"] if "auth_provider" in user.keys() else "local"
+    session["profile_photo_path"] = user["profile_photo_path"] if "profile_photo_path" in user.keys() else None
 
 
 def _dashboard_for_role():
-    return redirect(url_for("provider_dashboard" if session.get("role") == "provider" else "customer_dashboard"))
+    role = session.get("role")
+    if role == "admin":
+        return redirect(url_for("admin_operations"))
+    return redirect(url_for("provider_dashboard" if role == "provider" else "customer_dashboard"))
 
 
 @app.context_processor
@@ -527,9 +685,10 @@ def google_complete():
         flash("🎉 Congratulations! Your SmartServe account was created and you have successfully logged in with Google.")
         return _dashboard_for_role()
     connection=get_db_connection()
-    services=connection.execute("SELECT id,name,description FROM services ORDER BY name").fetchall()
+    services=connection.execute("SELECT id,name,description,category,icon FROM services ORDER BY COALESCE(sort_order,100), name").fetchall()
+    service_groups=_grouped_services(connection)
     connection.close()
-    return render_template("oauth_complete.html", pending=pending, services=services)
+    return render_template("oauth_complete.html", pending=pending, services=services, service_groups=service_groups)
 
 
 # ---------------- REGISTER ----------------
@@ -546,11 +705,19 @@ def register():
         phone = request.form.get("phone", "").strip()
 
         if not name or not email or not password:
-            flash("Please fill all fields.")
+            flash("Please fill in your name, email and password.")
+            return redirect(url_for("register"))
+
+        if len(password) < 6:
+            flash("Password must be at least 6 characters long.")
             return redirect(url_for("register"))
 
         if role not in ["customer", "provider"]:
-            flash("Invalid role.")
+            flash("Please choose whether you are a Customer or a Service Provider.")
+            return redirect(url_for("register"))
+
+        if role == "provider" and not request.form.getlist("service_ids") and not request.form.get("skills", "").strip():
+            flash("Select at least one service you offer.")
             return redirect(url_for("register"))
 
         hashed_password = generate_password_hash(password)
@@ -573,9 +740,9 @@ def register():
 
                 service_ids = request.form.getlist("service_ids")
                 skills = request.form.get("skills", "").strip()
-                experience = request.form.get("experience", 0)
-
-                if not experience:
+                try:
+                    experience = max(0, min(60, int(request.form.get("experience", 0) or 0)))
+                except (TypeError, ValueError):
                     experience = 0
 
                 cursor.execute("""
@@ -585,7 +752,7 @@ def register():
                 """, (
                     user_id,
                     skills,
-                    int(experience),
+                    experience,
                     0,
                     1
                 ))
@@ -607,7 +774,7 @@ def register():
             except Exception as email_exc:
                 print("REGISTRATION EMAIL WARNING:", repr(email_exc))
 
-            flash("🎉 Congratulations! Your SmartServe account has been successfully registered. Please login.")
+            flash("Your SmartServe account is ready. Sign in to continue.")
             return redirect(url_for("login"))
 
         except Exception as e:
@@ -616,9 +783,9 @@ def register():
 
             print("REGISTRATION ERROR:", repr(e))
             if "UNIQUE constraint failed" in str(e):
-                flash("Email already registered. Try another email or login to your existing account.")
+                flash("This email is already registered. Sign in instead or use a different email.")
             else:
-                flash(f"Registration failed: {e}")
+                flash("Registration could not be completed. Please try again.")
 
             return redirect(url_for("register"))
 
@@ -626,9 +793,10 @@ def register():
             connection.close()
 
     connection = get_db_connection()
-    services = connection.execute("SELECT id,name,description FROM services ORDER BY name").fetchall()
+    services = connection.execute("SELECT id,name,description,category,icon FROM services ORDER BY COALESCE(sort_order,100), name").fetchall()
+    service_groups = _grouped_services(connection)
     connection.close()
-    return render_template("register.html", services=services)
+    return render_template("register.html", services=services, service_groups=service_groups)
 
 
 # ---------------- LOGIN ----------------
@@ -710,6 +878,7 @@ def customer_dashboard():
             services.name AS service_name,
             provider_users.name AS provider_name,
             provider_users.phone AS provider_phone,
+            provider_users.profile_photo_path AS provider_photo,
             provider_users.latitude AS provider_latitude,
             provider_users.longitude AS provider_longitude,
             provider_users.location_updated_at AS provider_location_updated_at,
@@ -734,15 +903,24 @@ def customer_dashboard():
     )).fetchall()
 
     top_providers = connection.execute("""
-        SELECT p.id AS provider_id, p.rating, p.skills, u.name, u.is_online
+        SELECT p.id AS provider_id, p.rating, p.skills, p.experience, u.name, u.is_online, u.profile_photo_path,
+               (SELECT COUNT(*) FROM reviews rv WHERE rv.provider_id=p.id) AS review_count
         FROM providers p JOIN users u ON u.id = p.user_id
         WHERE p.approved = 1 ORDER BY p.rating DESC, p.experience DESC LIMIT 4
     """).fetchall()
+    services = connection.execute("SELECT id,name,icon,category FROM services ORDER BY COALESCE(sort_order,100), name").fetchall()
+    upcoming_plans = connection.execute("""
+        SELECT rb.id, rb.frequency, rb.next_run_at, s.name AS service_name, pu.name AS provider_name, rb.provider_id,
+               CAST(julianday(rb.next_run_at) - julianday('now') AS INTEGER) AS days_left
+        FROM recurring_bookings rb JOIN services s ON s.id = rb.service_id
+        LEFT JOIN providers p ON p.id = rb.provider_id LEFT JOIN users pu ON pu.id = p.user_id
+        WHERE rb.customer_id = ? AND rb.active = 1 ORDER BY rb.next_run_at ASC LIMIT 5
+    """, (session["user_id"],)).fetchall()
     connection.close()
 
     return render_template(
         "customer_dashboard.html",
-        requests=requests, top_providers=top_providers
+        requests=requests, top_providers=top_providers, services=services, upcoming_plans=upcoming_plans
     )
 
 # ---------------- PROVIDER DASHBOARD ----------------
@@ -759,14 +937,17 @@ def provider_dashboard():
     connection = get_db_connection()
 
     provider = connection.execute("""
-        SELECT *
-        FROM providers
-        WHERE user_id = ?
+        SELECT p.*, u.name, u.email, u.phone, u.profile_photo_path, u.pincode, u.location_source,
+               u.is_online, u.latitude, u.longitude, u.location_updated_at
+        FROM providers p JOIN users u ON u.id = p.user_id
+        WHERE p.user_id = ?
     """, (session["user_id"],)).fetchone()
 
     requests = []
     offers = []
     provider_reviews = []
+    provider_services = []
+    stats = {"active": 0, "completed": 0, "pending": 0, "net_earnings": 0.0, "review_count": 0}
 
     if provider:
         offers = connection.execute("""
@@ -819,6 +1000,17 @@ def provider_dashboard():
             LIMIT 50
         """, (provider["id"],)).fetchall()
 
+        provider_services = connection.execute("""
+            SELECT s.id, s.name, s.icon, s.category FROM provider_services ps JOIN services s ON s.id = ps.service_id
+            WHERE ps.provider_id = ? ORDER BY COALESCE(s.sort_order,100), s.name
+        """, (provider["id"],)).fetchall()
+        stats["active"] = sum(1 for r in requests if r["status"] in TRACKING_ACTIVE_STATUSES)
+        stats["completed"] = sum(1 for r in requests if r["status"] == "COMPLETED")
+        stats["pending"] = sum(1 for r in requests if r["status"] == "ASSIGNED")
+        stats["review_count"] = len(provider_reviews)
+        earn = connection.execute("SELECT COALESCE(SUM(net_amount),0) net FROM provider_earnings WHERE provider_id=?", (provider["id"],)).fetchone()
+        stats["net_earnings"] = float(earn["net"] or 0)
+
     connection.close()
 
     return render_template(
@@ -826,7 +1018,9 @@ def provider_dashboard():
         provider=provider,
         requests=requests,
         offers=offers,
-        provider_reviews=provider_reviews
+        provider_reviews=provider_reviews,
+        provider_services=provider_services,
+        stats=stats
     )
 
 # ---------------- SERVICE REQUEST ----------------
@@ -843,10 +1037,10 @@ def request_service():
     connection = get_db_connection()
 
     services = connection.execute("""
-        SELECT MIN(id) AS id, name, description
+        SELECT MIN(id) AS id, name, description, MIN(icon) AS icon, MIN(category) AS category, MIN(COALESCE(sort_order,100)) AS sort_order
         FROM services
         GROUP BY LOWER(name)
-        ORDER BY name
+        ORDER BY sort_order, name
     """).fetchall()
 
     service_map = {service["name"]: service["id"] for service in services}
@@ -960,38 +1154,12 @@ def request_service():
         image_display_path = None
 
         if image and image.filename:
-
-            if not allowed_file(image.filename):
-
-                flash(
-                    "Only JPG, JPEG, PNG and WEBP images are allowed."
-                )
-
-                return redirect(
-                    url_for("request_service")
-                )
-
-            filename = secure_filename(image.filename)
-
-            # Avoid filename conflicts
-            import uuid
-
-            unique_filename = (
-                str(uuid.uuid4())
-                + "_"
-                + filename
-            )
-
-            image_path = os.path.join(
-                app.config["UPLOAD_FOLDER"],
-                unique_filename
-            )
-
-            image.save(image_path)
-
-            image_display_path = (
-                "uploads/" + unique_filename
-            )
+            try:
+                image_display_path = _save_public_image(image, "request")
+            except ValueError as exc:
+                flash(str(exc))
+                return redirect(url_for("request_service"))
+            image_path = os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(image_display_path))
 
         # ---------------- OPTIONAL AI ANALYSIS ----------------
 
@@ -1085,6 +1253,11 @@ def request_service():
 
         request_id = cursor.lastrowid
 
+        # Any due repeat plan for this service rolls forward to its next visit.
+        for plan in connection.execute("SELECT id, frequency FROM recurring_bookings WHERE customer_id=? AND service_id=? AND active=1 AND datetime(next_run_at) <= datetime('now','+3 day')", (session["user_id"], service_id)).fetchall():
+            step = REPEAT_FREQUENCIES.get(str(plan["frequency"]).upper(), '+30 day')
+            connection.execute("UPDATE recurring_bookings SET next_run_at=datetime('now', ?) WHERE id=?", (step, plan["id"]))
+
         connection.commit()
 
         connection.close()
@@ -1146,13 +1319,11 @@ def ai_analyze_and_create():
     image_path = None
     image_display_path = None
     if image and image.filename:
-        if not allowed_file(image.filename):
-            return jsonify({"success": False, "message": "Only JPG, JPEG, PNG and WEBP images are allowed."}), 400
-        os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
-        filename = secure_filename(f"{uuid.uuid4().hex}_{image.filename}")
-        image_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-        image.save(image_path)
-        image_display_path = "uploads/" + filename
+        try:
+            image_display_path = _save_public_image(image, "request")
+        except ValueError as exc:
+            return jsonify({"success": False, "message": str(exc)}), 400
+        image_path = os.path.join(app.config["UPLOAD_FOLDER"], os.path.basename(image_display_path))
 
     try:
         from ai_service import analyze_problem
@@ -1317,7 +1488,7 @@ def api_matching_start(request_id):
     if quote:
         connection.execute("UPDATE service_requests SET upfront_min=?,upfront_max=?,platform_fee=?,travel_fee=? WHERE id=?",(quote["min"],quote["max"],quote["platform_fee"],quote["travel_fee"],request_id))
     try:
-        providers=available_providers(connection,request_id,radius,100)
+        providers=_with_photo_urls(available_providers(connection,request_id,radius,100))
     except Exception as exc:
         connection.rollback(); connection.close()
         print("MATCHING START ERROR:", repr(exc))
@@ -1348,7 +1519,7 @@ def api_nearby_providers(request_id):
     try: radius=max(1,min(float(request.args.get("radius",row["service_radius_km"] or 10)),100))
     except (TypeError,ValueError): radius=10
     try:
-        providers=available_providers(connection,request_id,radius,100)
+        providers=_with_photo_urls(available_providers(connection,request_id,radius,100))
     except Exception as exc:
         connection.close()
         print("NEARBY PROVIDERS ERROR:", repr(exc))
@@ -1470,7 +1641,7 @@ def find_providers(request_id):
     if not service_request:
         connection.close(); flash("Service request not found."); return redirect(url_for("customer_dashboard"))
     radius=max(1,min(float(request.args.get("radius",service_request["service_radius_km"] or 10)),100))
-    providers=available_providers(connection,request_id,radius,100)
+    providers=_with_photo_urls(available_providers(connection,request_id,radius,100))
     connection.close()
     return render_template("providers.html",providers=providers,service_request=service_request,radius_km=radius,has_customer_location=bool(service_request["customer_latitude"] is not None and service_request["customer_longitude"] is not None))
 
@@ -1486,7 +1657,7 @@ def customer_select_provider(request_id, provider_id):
             connection.rollback(); return jsonify({"success":False,"message":"Request not found"}),404
         if req["provider_id"] is not None or req["status"] in ("ACCEPTED","IN_PROGRESS","AWAITING_VERIFICATION","AWAITING_PAYMENT","COMPLETED"):
             connection.rollback(); return jsonify({"success":False,"message":"A provider is already selected for this booking."}),409
-        providers=available_providers(connection,request_id,float(req["service_radius_km"] or 10),100)
+        providers=_with_photo_urls(available_providers(connection,request_id,float(req["service_radius_km"] or 10),100))
         chosen=next((x for x in providers if int(x["provider_id"])==int(provider_id)),None)
         if not chosen:
             connection.rollback(); return jsonify({"success":False,"message":"That provider is no longer available. Refresh and choose another."}),409
@@ -1544,12 +1715,21 @@ def provider_profile_edit():
             if legacy_ids: selected_rows=_sync_provider_services(connection, provider_id, legacy_ids)
         connection.execute("UPDATE providers SET experience=?,bio=? WHERE user_id=?",(experience,bio or None,session["user_id"]))
         photo=request.files.get("profile_photo")
-        if photo and photo.filename and allowed_file(photo.filename):
-            ext=photo.filename.rsplit('.',1)[1].lower(); filename=secure_filename(f"provider_{session['user_id']}_{uuid.uuid4().hex}.{ext}")
-            os.makedirs(app.config["UPLOAD_FOLDER"],exist_ok=True); photo.save(os.path.join(app.config["UPLOAD_FOLDER"],filename))
-            connection.execute("UPDATE users SET profile_photo_path=? WHERE id=?",(f"uploads/{filename}",session["user_id"]))
+        if photo and photo.filename:
+            try:
+                new_path=_save_public_image(photo, f"provider_{session['user_id']}")
+            except ValueError as exc:
+                connection.rollback(); connection.close(); flash(f"Profile photo not saved: {exc}"); return redirect(url_for("provider_profile_edit"))
+            if provider["profile_photo_path"]:
+                _delete_media(provider["profile_photo_path"])
+            connection.execute("UPDATE users SET profile_photo_path=? WHERE id=?",(new_path,session["user_id"]))
+        if request.form.get("remove_photo")=="1" and provider["profile_photo_path"] and not (photo and photo.filename):
+            _delete_media(provider["profile_photo_path"])
+            connection.execute("UPDATE users SET profile_photo_path=NULL WHERE id=?",(session["user_id"],))
         ekyc=request.files.get("ekyc_document")
-        if ekyc and ekyc.filename and allowed_document(ekyc.filename):
+        if ekyc and ekyc.filename:
+            if not allowed_document(ekyc.filename):
+                connection.rollback(); connection.close(); flash("eKYC document must be a JPG, PNG, WEBP or PDF file."); return redirect(url_for("provider_profile_edit"))
             ext=ekyc.filename.rsplit('.',1)[1].lower(); filename=secure_filename(f"ekyc_{session['user_id']}_{uuid.uuid4().hex}.{ext}")
             ekyc.save(os.path.join(app.config["PRIVATE_UPLOAD_FOLDER"],filename))
             connection.execute("UPDATE providers SET ekyc_document_path=?,ekyc_status='SUBMITTED' WHERE user_id=?",(filename,session["user_id"]))
@@ -1561,9 +1741,15 @@ def provider_profile_edit():
             for bk,label,ok in badge_rules:
                 if ok: connection.execute("INSERT OR IGNORE INTO provider_badges(provider_id,badge_key,label) VALUES(?,?,?)",(pid,bk,label))
                 else: connection.execute("DELETE FROM provider_badges WHERE provider_id=? AND badge_key=?",(pid,bk))
-        connection.commit(); connection.close(); flash("Profile updated. All profile fields remain optional."); return redirect(url_for("provider_profile_edit"))
+        connection.commit()
+        fresh=connection.execute("SELECT name,profile_photo_path FROM users WHERE id=?",(session["user_id"],)).fetchone()
+        if fresh:
+            session["user_name"]=fresh["name"]; session["profile_photo_path"]=fresh["profile_photo_path"]
+        connection.close(); flash("Profile updated successfully."); return redirect(url_for("provider_profile_edit"))
     selected_service_ids=[int(r["service_id"]) for r in connection.execute("SELECT service_id FROM provider_services WHERE provider_id=?", (provider["id"],)).fetchall()]
-    connection.close(); return render_template("provider_profile_edit.html",provider=provider,services=available_services,selected_service_ids=selected_service_ids)
+    badges=connection.execute("SELECT label,badge_key FROM provider_badges WHERE provider_id=? ORDER BY id",(provider["id"],)).fetchall()
+    service_groups=_grouped_services(connection)
+    connection.close(); return render_template("provider_profile_edit.html",provider=provider,services=available_services,service_groups=service_groups,selected_service_ids=selected_service_ids,badges=badges)
 
 @app.route("/provider/ekyc/<int:provider_id>")
 def provider_ekyc(provider_id):
@@ -1608,11 +1794,13 @@ def provider_profile(provider_id):
     reviews=connection.execute("SELECT r.rating,r.review,r.created_at,u.name AS customer_name FROM reviews r JOIN users u ON u.id=r.customer_id WHERE r.provider_id=? ORDER BY r.created_at DESC LIMIT 8",(provider_id,)).fetchall() if provider else []
     badges=connection.execute("SELECT label,badge_key FROM provider_badges WHERE provider_id=? ORDER BY id",(provider_id,)).fetchall() if provider else []
     portfolio=connection.execute("SELECT title,description,image_path,created_at FROM portfolio_items WHERE provider_id=? ORDER BY created_at DESC LIMIT 12",(provider_id,)).fetchall() if provider else []
+    provider_services=connection.execute("SELECT s.id,s.name,s.icon,s.category FROM provider_services ps JOIN services s ON s.id=ps.service_id WHERE ps.provider_id=? ORDER BY COALESCE(s.sort_order,100),s.name",(provider_id,)).fetchall() if provider else []
+    is_favorite=bool(connection.execute("SELECT 1 FROM favorite_providers WHERE customer_id=? AND provider_id=?",(session["user_id"],provider_id)).fetchone()) if provider and session.get("role")=="customer" else False
     connection.close()
-    if not provider: flash("Provider not found."); return redirect(url_for("customer_dashboard"))
+    if not provider: flash("Provider not found."); return redirect(url_for("customer_dashboard") if session.get("role")!="provider" else url_for("provider_dashboard"))
     data=dict(provider); rating=min(5,max(0,float(data.get("rating") or 0))); exp=min(10,max(0,int(data.get("experience") or 0))); completed=min(50,int(data.get("completed_jobs") or 0)); completeness=sum(bool(data.get(k)) for k in ("phone","profile_photo_path","bio","skills","experience","ekyc_status"))/6
     data["trust_score"]=round((rating/5)*45+(exp/10)*15+completeness*15+(completed/50)*15+(10 if str(data.get('ekyc_status') or '').upper() in ('SUBMITTED','VERIFIED') else 0),1)
-    return render_template("provider_profile.html",provider=data,reviews=reviews,badges=badges,portfolio=portfolio)
+    return render_template("provider_profile.html",provider=data,reviews=reviews,badges=badges,portfolio=portfolio,provider_services=provider_services,is_favorite=is_favorite)
 
 # ---------------- PROVIDER RESPONSE ----------------
 
@@ -1897,8 +2085,10 @@ def service_proof(request_id, filename):
     wanted = "uploads/" + os.path.basename(filename)
     if wanted not in paths:
         return "Not found", 404
-    from flask import send_from_directory
-    return send_from_directory(app.config["UPLOAD_FOLDER"], os.path.basename(filename), as_attachment=False)
+    target = _find_media(wanted)
+    if not target:
+        return "Not found", 404
+    return send_from_directory(os.path.dirname(target), os.path.basename(target), as_attachment=False)
 
 
 @app.route("/verify-service/<int:request_id>", methods=["POST"])
@@ -2253,133 +2443,304 @@ def call_details(request_id):
 
 # ---------------- REAL-TIME LOCATION ----------------
 
+TRACKING_ACTIVE_STATUSES = ("ASSIGNED", "ACCEPTED", "ARRIVED", "IN_PROGRESS", "AWAITING_VERIFICATION", "AWAITING_PAYMENT")
+LIVE_LOCATION_SECONDS = 25        # GPS newer than this is "live"
+STALE_LOCATION_SECONDS = 120      # older than this is treated as offline
+OSRM_BASE_URL = os.getenv("OSRM_BASE_URL", "https://router.project-osrm.org").rstrip("/")
+_route_cache = {}
+_route_cache_lock = threading.Lock()
+
+
+def _parse_db_time(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "").replace(" ", "T"))
+    except Exception:
+        return None
+
+
+def _location_age_seconds(updated_at):
+    dt = _parse_db_time(updated_at)
+    if not dt:
+        return None
+    return max(0.0, (datetime.utcnow() - dt).total_seconds())
+
+
+def _active_requests_for_user(connection, user_id):
+    return connection.execute("""
+        SELECT sr.id, sr.customer_id, p.user_id AS provider_user_id
+        FROM service_requests sr
+        LEFT JOIN providers p ON p.id = sr.provider_id
+        WHERE (sr.customer_id = ? OR p.user_id = ?)
+          AND sr.status IN ('ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')
+    """, (user_id, user_id)).fetchall()
+
+
+def _store_location(user_id, latitude, longitude, accuracy=None, heading=None, speed=None):
+    """Persist a browser GPS fix and fan it out to every active service room the user belongs to."""
+    connection = get_db_connection()
+    try:
+        active_rows = _active_requests_for_user(connection, user_id)
+        current = connection.execute("SELECT location_source, is_online FROM users WHERE id=?", (user_id,)).fetchone()
+        pin_mode = bool(current and str(current["location_source"] or "").upper() == "PINCODE")
+        if pin_mode and not active_rows:
+            # The user deliberately chose a PIN-code service area for discovery. Keep it until a
+            # service becomes active (when precise GPS is required for tracking).
+            connection.execute("UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?", (user_id,))
+            connection.commit()
+            return []
+        connection.execute("""
+            UPDATE users
+            SET latitude = ?, longitude = ?, location_accuracy = ?, location_heading = ?, location_speed = ?,
+                location_updated_at = CURRENT_TIMESTAMP, location_source = 'GPS',
+                last_seen_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (latitude, longitude, accuracy, heading, speed, user_id))
+        for active in active_rows:
+            role = "customer" if int(active["customer_id"]) == int(user_id) else "provider"
+            connection.execute("""
+                INSERT INTO location_updates(request_id,user_id,role,latitude,longitude,accuracy,heading,speed)
+                VALUES(?,?,?,?,?,?,?,?)
+            """, (active["id"], user_id, role, latitude, longitude, accuracy, heading, speed))
+        connection.commit()
+        # Keep the history table small: only the last 200 fixes per request are needed.
+        for active in active_rows:
+            connection.execute("""
+                DELETE FROM location_updates WHERE request_id=? AND id NOT IN (
+                    SELECT id FROM location_updates WHERE request_id=? ORDER BY id DESC LIMIT 200)
+            """, (active["id"], active["id"]))
+        connection.commit()
+    finally:
+        connection.close()
+    if socketio:
+        updated_at = datetime.utcnow().isoformat(" ", "seconds")
+        for active in active_rows:
+            role = "customer" if int(active["customer_id"]) == int(user_id) else "provider"
+            socketio.emit("location_update", {
+                "request_id": int(active["id"]), "user_id": int(user_id), "role": role,
+                "latitude": latitude, "longitude": longitude, "accuracy": accuracy,
+                "heading": heading, "speed": speed, "updated_at": updated_at, "live": True,
+            }, to=_request_room(active["id"]))
+    return [int(a["id"]) for a in active_rows]
+
+
+def _parse_location_payload(data):
+    data = data or {}
+    latitude = float(data.get("latitude"))
+    longitude = float(data.get("longitude"))
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        raise ValueError("Coordinates out of range")
+    if latitude == 0 and longitude == 0:
+        raise ValueError("Invalid coordinates")
+
+    def _opt(name, lo, hi):
+        value = data.get(name)
+        if value in (None, "", "null"):
+            return None
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+        if value != value or value < lo or value > hi:  # NaN or out of range
+            return None
+        return value
+    return latitude, longitude, _opt("accuracy", 0, 100000), _opt("heading", 0, 360), _opt("speed", 0, 200)
+
+
 @app.route("/api/location/update", methods=["POST"])
 def update_location():
     if "user_id" not in session:
-        return jsonify({"success": False, "message": "Please login first"}), 401
-
-    data = request.get_json(silent=True) or {}
+        return jsonify({"success": False, "message": "Please sign in first"}), 401
     try:
-        latitude = float(data.get("latitude"))
-        longitude = float(data.get("longitude"))
-        accuracy = float(data.get("accuracy", 0) or 0)
-    except (TypeError, ValueError):
-        return jsonify({"success": False, "message": "Invalid coordinates"}), 400
-
-    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-        return jsonify({"success": False, "message": "Coordinates out of range"}), 400
-
-    connection = get_db_connection()
-    connection.execute("""
-        UPDATE users
-        SET latitude = ?, longitude = ?, location_accuracy = ?, location_updated_at = CURRENT_TIMESTAMP,
-            location_source = 'GPS', is_online = 1, last_seen_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-    """, (latitude, longitude, accuracy, session["user_id"]))
-    connection.commit()
-    connection.close()
-
-    if socketio:
-        connection = get_db_connection()
-        active_rows = connection.execute("""
-            SELECT id FROM service_requests
-            WHERE (customer_id = ? OR provider_id IN (SELECT id FROM providers WHERE user_id = ?))
-              AND status IN ('ASSIGNED','ACCEPTED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')
-        """, (session["user_id"], session["user_id"])).fetchall()
-        connection.close()
-        payload = {"user_id": session["user_id"], "latitude": latitude, "longitude": longitude, "accuracy": accuracy}
-        for active in active_rows:
-            socketio.emit("location_update", payload, to=_request_room(active["id"]))
-
+        latitude, longitude, accuracy, heading, speed = _parse_location_payload(request.get_json(silent=True))
+    except (TypeError, ValueError) as exc:
+        return jsonify({"success": False, "message": str(exc) or "Invalid coordinates"}), 400
+    active_ids = _store_location(session["user_id"], latitude, longitude, accuracy, heading, speed)
     return jsonify({
         "success": True,
         "latitude": latitude,
         "longitude": longitude,
-        "accuracy": accuracy
+        "accuracy": accuracy,
+        "active_requests": active_ids,
+        "updated_at": datetime.utcnow().isoformat(" ", "seconds"),
     })
 
 
-@app.route("/api/request-location/<int:request_id>")
-def request_location(request_id):
-    if "user_id" not in session:
-        return jsonify({"success": False, "message": "Please login first"}), 401
+if socketio:
+    @socketio.on("share_location")
+    def socket_share_location(data):
+        """Low-latency GPS ingestion over the existing Socket.IO connection."""
+        if not session.get("user_id"):
+            emit("socket_error", {"message": "Login required"})
+            return
+        try:
+            latitude, longitude, accuracy, heading, speed = _parse_location_payload(data)
+        except (TypeError, ValueError):
+            emit("socket_error", {"message": "Invalid coordinates"})
+            return
+        try:
+            active_ids = _store_location(session["user_id"], latitude, longitude, accuracy, heading, speed)
+            emit("location_ack", {"ok": True, "active_requests": active_ids})
+        except Exception as exc:
+            print("SOCKET LOCATION ERROR:", repr(exc))
+            emit("location_ack", {"ok": False})
 
-    connection = get_db_connection()
+
+def _route_between(origin, destination):
+    """Driving route via OSRM (cached ~20s). Returns None if routing is unavailable.
+
+    Coordinates are (lat, lon) tuples. The cache key is rounded to ~11 m so a
+    stationary device does not create new routing requests every poll.
+    """
+    if not origin or not destination:
+        return None
+    key = (round(origin[0], 4), round(origin[1], 4), round(destination[0], 4), round(destination[1], 4))
+    now = time.monotonic()
+    with _route_cache_lock:
+        cached = _route_cache.get(key)
+        if cached and now - cached[0] < 20:
+            return cached[1]
+    result = None
+    try:
+        url = (f"{OSRM_BASE_URL}/route/v1/driving/{origin[1]},{origin[0]};{destination[1]},{destination[0]}"
+               "?overview=full&geometries=geojson&steps=false&alternatives=false")
+        req = urllib.request.Request(url, headers={"User-Agent": "SmartServe/7.3 live tracking"})
+        with urllib.request.urlopen(req, timeout=6) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if payload.get("code") == "Ok" and payload.get("routes"):
+            route = payload["routes"][0]
+            coords = [[pt[1], pt[0]] for pt in (route.get("geometry") or {}).get("coordinates", [])]
+            result = {
+                "distance_km": round(float(route["distance"]) / 1000.0, 2),
+                "duration_minutes": max(1, int(round(float(route["duration"]) / 60.0))),
+                "geometry": coords,
+                "source": "osrm",
+            }
+    except Exception as exc:
+        print("OSRM ROUTE WARNING:", repr(exc))
+    with _route_cache_lock:
+        if len(_route_cache) > 500:
+            _route_cache.clear()
+        _route_cache[key] = (now, result)
+    return result
+
+
+def _describe_location(latitude, longitude, updated_at, source, accuracy=None, heading=None, speed=None):
+    """Classify a stored location as live / stale / offline / approximate without inventing data."""
+    base = {"latitude": None, "longitude": None, "accuracy": accuracy, "heading": heading, "speed": speed,
+            "updated_at": updated_at, "age_seconds": None, "source": (source or "").upper() or None,
+            "live": False, "stale": False, "approximate": False, "state": "offline"}
+    if latitude is None or longitude is None:
+        base["state"] = "unknown"
+        return base
+    source_upper = str(source or "").upper()
+    age = _location_age_seconds(updated_at)
+    base["age_seconds"] = None if age is None else int(age)
+    if source_upper == "PINCODE":
+        # A PIN-code location is a deliberately approximate service-area point; it never "moves".
+        base.update({"latitude": float(latitude), "longitude": float(longitude), "approximate": True, "state": "approximate"})
+        return base
+    if age is None or age > STALE_LOCATION_SECONDS:
+        base["state"] = "offline"
+        return base
+    base.update({"latitude": float(latitude), "longitude": float(longitude)})
+    if age <= LIVE_LOCATION_SECONDS:
+        base.update({"live": True, "state": "live"})
+    else:
+        base.update({"stale": True, "state": "stale"})
+    return base
+
+
+def _tracking_snapshot(connection, request_id, viewer_id):
     row = connection.execute("""
-        SELECT
-            sr.id,
-            sr.customer_id,
-            sr.provider_id,
-            sr.status,
-            cu.name AS customer_name,
-            cu.latitude AS customer_latitude,
-            cu.longitude AS customer_longitude,
-            cu.location_updated_at AS customer_location_updated_at,
-            cu.location_source AS customer_location_source,
-            pu.name AS provider_name,
-            pu.latitude AS provider_latitude,
-            pu.longitude AS provider_longitude,
-            pu.location_updated_at AS provider_location_updated_at,
-            pu.location_source AS provider_location_source
+        SELECT sr.id, sr.customer_id, sr.provider_id, sr.status, sr.arrival_status,
+               sr.customer_latitude AS request_latitude, sr.customer_longitude AS request_longitude,
+               sr.customer_pincode, sr.address_text,
+               cu.name AS customer_name, cu.latitude AS customer_latitude, cu.longitude AS customer_longitude,
+               cu.location_updated_at AS customer_location_updated_at, cu.location_source AS customer_location_source,
+               cu.location_accuracy AS customer_accuracy, cu.location_heading AS customer_heading, cu.location_speed AS customer_speed,
+               cu.profile_photo_path AS customer_photo,
+               pu.id AS provider_user_id, pu.name AS provider_name, pu.latitude AS provider_latitude, pu.longitude AS provider_longitude,
+               pu.location_updated_at AS provider_location_updated_at, pu.location_source AS provider_location_source,
+               pu.location_accuracy AS provider_accuracy, pu.location_heading AS provider_heading, pu.location_speed AS provider_speed,
+               pu.profile_photo_path AS provider_photo, pu.phone AS provider_phone, cu.phone AS customer_phone
         FROM service_requests sr
         JOIN users cu ON cu.id = sr.customer_id
         LEFT JOIN providers p ON p.id = sr.provider_id
         LEFT JOIN users pu ON pu.id = p.user_id
         WHERE sr.id = ?
     """, (request_id,)).fetchone()
-
     if not row:
-        connection.close()
-        return jsonify({"success": False, "message": "Request not found"}), 404
-
-    is_customer = row["customer_id"] == session["user_id"]
-    provider_user_id = None
-    if row["provider_id"]:
-        provider_user_id = connection.execute(
-            "SELECT user_id FROM providers WHERE id = ?",
-            (row["provider_id"],)
-        ).fetchone()
-        provider_user_id = provider_user_id["user_id"] if provider_user_id else None
-    is_provider = provider_user_id == session["user_id"]
-    connection.close()
-
+        return None, ("Request not found", 404)
+    is_customer = int(row["customer_id"]) == int(viewer_id)
+    is_provider = row["provider_user_id"] is not None and int(row["provider_user_id"]) == int(viewer_id)
     if not (is_customer or is_provider):
-        return jsonify({"success": False, "message": "Not authorized"}), 403
+        return None, ("You are not part of this service", 403)
 
-    # A location is considered live only when it was written by the browser recently.
-    # Older/missing coordinates are deliberately hidden instead of showing a seeded
-    # or estimated position.
-    def live_location(latitude, longitude, updated_at, source=None):
-        if latitude is None or longitude is None:
-            return {"latitude": None, "longitude": None, "updated_at": updated_at, "live": False, "source": source}
-        # PINCODE locations are intentionally stable approximate service-area
-        # coordinates for local testing; they do not expire like browser GPS.
-        if str(source or "").upper() == "PINCODE":
-            return {"latitude": float(latitude), "longitude": float(longitude), "updated_at": updated_at, "live": True, "source": source}
-        if not updated_at:
-            return {"latitude": None, "longitude": None, "updated_at": updated_at, "live": False, "source": source}
-        try:
-            age_seconds = (datetime.utcnow() - datetime.fromisoformat(str(updated_at).replace("Z", "").replace(" ", "T"))).total_seconds()
-        except Exception:
-            age_seconds = 10**9
-        is_live = age_seconds <= 20
-        return {
-            "latitude": float(latitude) if is_live else None,
-            "longitude": float(longitude) if is_live else None,
-            "updated_at": updated_at,
-            "live": is_live
-        }
+    customer = _describe_location(row["customer_latitude"], row["customer_longitude"], row["customer_location_updated_at"],
+                                  row["customer_location_source"], row["customer_accuracy"], row["customer_heading"], row["customer_speed"])
+    # If the customer's device is offline, fall back to the approximate PIN/service address stored on the request.
+    if customer["state"] in ("offline", "unknown") and row["request_latitude"] is not None and row["request_longitude"] is not None:
+        customer = _describe_location(row["request_latitude"], row["request_longitude"], None, "PINCODE")
+    provider = _describe_location(row["provider_latitude"], row["provider_longitude"], row["provider_location_updated_at"],
+                                  row["provider_location_source"], row["provider_accuracy"], row["provider_heading"], row["provider_speed"]) \
+        if row["provider_id"] else _describe_location(None, None, None, None)
+    customer["name"] = row["customer_name"]; customer["photo_url"] = media_url(row["customer_photo"])
+    provider["name"] = row["provider_name"]; provider["photo_url"] = media_url(row["provider_photo"])
 
-    customer_location = live_location(row["customer_latitude"], row["customer_longitude"], row["customer_location_updated_at"], row["customer_location_source"])
-    provider_location = live_location(row["provider_latitude"], row["provider_longitude"], row["provider_location_updated_at"], row["provider_location_source"])
-
-    return jsonify({
+    tracking_active = row["status"] in TRACKING_ACTIVE_STATUSES
+    distance_km = None; route = None; eta_minutes = None; eta_source = None
+    if tracking_active and customer["latitude"] is not None and provider["latitude"] is not None:
+        origin = (provider["latitude"], provider["longitude"]); destination = (customer["latitude"], customer["longitude"])
+        straight = haversine(origin[0], origin[1], destination[0], destination[1])
+        distance_km = round(straight, 2)
+        if row["status"] in ("ASSIGNED", "ACCEPTED"):
+            route = _route_between(origin, destination)
+            if route:
+                distance_km = route["distance_km"]; eta_minutes = route["duration_minutes"]; eta_source = "road"
+            elif straight is not None:
+                # Routing service unreachable: derive an approximate ETA from the real straight-line
+                # distance (x1.3 typical road detour factor at 25 km/h urban average). Clearly labelled.
+                eta_minutes = max(1, int(round((straight * 1.3) / 25.0 * 60)))
+                eta_source = "estimate"
+    return {
         "success": True,
-        "request_id": request_id,
+        "request_id": int(row["id"]),
         "status": row["status"],
-        "customer": {"name": row["customer_name"], **customer_location},
-        "provider": {"name": row["provider_name"], **provider_location}
-    })
+        "arrival_status": row["arrival_status"],
+        "tracking_active": tracking_active,
+        "viewer_role": "customer" if is_customer else "provider",
+        "customer": customer,
+        "provider": provider,
+        "distance_km": distance_km,
+        "eta_minutes": eta_minutes,
+        "eta_source": eta_source,
+        "route": route["geometry"] if route else None,
+        "route_source": route["source"] if route else None,
+        "arrived_nearby": bool(distance_km is not None and distance_km <= 0.2),
+        "server_time": datetime.utcnow().isoformat(" ", "seconds"),
+    }, None
+
+
+@app.route("/api/request-location/<int:request_id>")
+def request_location(request_id):
+    if "user_id" not in session:
+        return jsonify({"success": False, "message": "Please sign in first"}), 401
+    connection = get_db_connection()
+    try:
+        data, error = _tracking_snapshot(connection, request_id, session["user_id"])
+    finally:
+        connection.close()
+    if error:
+        return jsonify({"success": False, "message": error[0]}), error[1]
+    return jsonify(data)
+
+
+@app.route("/api/service/<int:request_id>/tracking")
+def service_tracking(request_id):
+    """Alias of /api/request-location for the live-service page."""
+    return request_location(request_id)
 
 
 # ---------------- AGREED PRICE ----------------
@@ -2830,7 +3191,15 @@ def admin_dispute_action(dispute_id,action):
     if not _require_role('admin'): return redirect(url_for('login'))
     status={'resolve':'RESOLVED','reject':'REJECTED'}.get(action)
     if not status: return redirect(url_for('admin_operations'))
-    c=get_db_connection(); c.execute('UPDATE disputes SET status=?,updated_at=CURRENT_TIMESTAMP,resolution=? WHERE id=?',(status,'Operations team '+status.lower()+' this case.',dispute_id)); c.commit(); c.close(); return redirect(url_for('admin_operations'))
+    resolution=request.form.get('resolution','').strip()[:500] or ('Operations team '+status.lower()+' this case.')
+    c=get_db_connection(); c.execute('UPDATE disputes SET status=?,updated_at=CURRENT_TIMESTAMP,resolved_at=CURRENT_TIMESTAMP,resolution=? WHERE id=?',(status,resolution,dispute_id))
+    row=c.execute('SELECT request_id,opened_by FROM disputes WHERE id=?',(dispute_id,)).fetchone()
+    if row:
+        c.execute("UPDATE admin_alerts SET status='RESOLVED',resolved_at=CURRENT_TIMESTAMP WHERE request_id=? AND user_id=? AND title='New dispute' AND status='OPEN'",(row['request_id'],row['opened_by']))
+        _log_event(c,int(row['request_id']),session['user_id'],'DISPUTE_'+status,resolution,{'dispute_id':dispute_id})
+    c.commit(); c.close()
+    if socketio and row: socketio.emit('dispute_update',{'dispute_id':dispute_id,'status':status,'resolution':resolution},to=f"user:{row['opened_by']}")
+    flash(f'Dispute #{dispute_id} marked {status.lower()}.'); return redirect(url_for('admin_operations'))
 
 # =========================================================
 # V7 LIVE SERVICE + TRUST / MARKETPLACE FEATURES
@@ -2838,18 +3207,38 @@ def admin_dispute_action(dispute_id,action):
 @app.route('/features')
 def marketplace_features():
     if 'user_id' not in session: return redirect(url_for('login'))
-    return render_template('marketplace_features.html')
+    hub={}
+    if session.get('role')=='provider':
+        conn=get_db_connection(); pid=_provider_id_for_user(conn,session['user_id'])
+        if pid:
+            p=conn.execute("SELECT p.rating,p.experience,p.bio,p.ekyc_status,u.phone,u.profile_photo_path FROM providers p JOIN users u ON u.id=p.user_id WHERE p.id=?",(pid,)).fetchone()
+            hub={
+                'portfolio_count':conn.execute("SELECT COUNT(*) c FROM portfolio_items WHERE provider_id=?",(pid,)).fetchone()['c'],
+                'review_count':conn.execute("SELECT COUNT(*) c FROM reviews WHERE provider_id=?",(pid,)).fetchone()['c'],
+                'rating':float(p['rating'] or 0) if p else 0,
+                'net_earnings':float(conn.execute("SELECT COALESCE(SUM(net_amount),0) n FROM provider_earnings WHERE provider_id=?",(pid,)).fetchone()['n']),
+                'service_count':conn.execute("SELECT COUNT(*) c FROM provider_services WHERE provider_id=?",(pid,)).fetchone()['c'],
+                'ekyc_status':(p['ekyc_status'] if p else 'NOT_SUBMITTED') or 'NOT_SUBMITTED',
+                'profile_completeness':round(100*sum(1 for k in ('phone','profile_photo_path','bio','experience') if p and p[k] not in (None,'',0))/4) if p else 0,
+            }
+        conn.close()
+    return render_template('marketplace_features.html',hub=hub)
 
 @app.route('/api/service/<int:request_id>/arrival-check')
 def arrival_check(request_id):
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
-    c=get_db_connection(); row=c.execute("""SELECT sr.*,pu.latitude plat,pu.longitude plon,sr.customer_latitude clat,sr.customer_longitude clon
-        FROM service_requests sr LEFT JOIN providers p ON p.id=sr.provider_id LEFT JOIN users pu ON pu.id=p.user_id WHERE sr.id=?""",(request_id,)).fetchone()
-    if not row: c.close(); return jsonify(success=False,message='Not found'),404
-    if row['plat'] is None or row['plon'] is None or row['clat'] is None or row['clon'] is None: c.close(); return jsonify(success=True,nearby=False,distance_km=None,message='Waiting for provider GPS/PIN location.')
-    d=haversine(row['plat'],row['plon'],row['clat'],row['clon']); nearby=d<=0.2
-    if nearby and row['status']=='ACCEPTED': c.execute("UPDATE service_requests SET route_status='NEAR_CUSTOMER' WHERE id=?",(request_id,)); c.commit()
-    c.close(); return jsonify(success=True,nearby=nearby,distance_km=round(d,2),message='Provider is within 200 metres.' if nearby else 'Provider is on the way.')
+    c=get_db_connection()
+    try:
+        data,error=_tracking_snapshot(c,request_id,session['user_id'])
+        if error: return jsonify(success=False,message=error[0]),error[1]
+        if data['distance_km'] is None:
+            return jsonify(success=True,nearby=False,distance_km=None,message='Waiting for both live locations.')
+        nearby=bool(data['arrived_nearby'])
+        if nearby and data['status']=='ACCEPTED':
+            c.execute("UPDATE service_requests SET route_status='NEAR_CUSTOMER' WHERE id=?",(request_id,)); c.commit()
+        return jsonify(success=True,nearby=nearby,distance_km=data['distance_km'],eta_minutes=data['eta_minutes'],message='Provider is within 200 metres.' if nearby else 'Provider is on the way.')
+    finally:
+        c.close()
 
 @app.route('/api/service/<int:request_id>/schedule',methods=['POST'])
 def schedule_service(request_id):
@@ -2868,8 +3257,24 @@ def schedule_service(request_id):
 @app.route('/api/service/<int:request_id>/warranty')
 def service_warranty(request_id):
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
-    c=get_db_connection(); row=c.execute("""SELECT sw.* FROM service_warranties sw JOIN service_requests sr ON sr.id=sw.request_id WHERE sw.request_id=? AND (sr.customer_id=? OR sr.provider_id IN (SELECT id FROM providers WHERE user_id=?))""",(request_id,session['user_id'],session['user_id'])).fetchone(); c.close()
-    return jsonify(success=True,warranty=dict(row) if row else None)
+    c=get_db_connection()
+    req,role=_participant_request(c,request_id,session['user_id'])
+    if not req: c.close(); return jsonify(success=False,message='You are not part of this service.'),403
+    info=c.execute("SELECT sr.status,sr.payment_status,sr.completed_at,sr.paid_at,s.name service_name,pu.name provider_name FROM service_requests sr JOIN services s ON s.id=sr.service_id LEFT JOIN providers p ON p.id=sr.provider_id LEFT JOIN users pu ON pu.id=p.user_id WHERE sr.id=?",(request_id,)).fetchone()
+    row=c.execute("""SELECT sw.*, CASE WHEN datetime(sw.warranty_until) >= datetime('now') THEN 1 ELSE 0 END AS active_now,
+                     CAST(julianday(sw.warranty_until)-julianday('now') AS INTEGER) AS days_remaining
+                     FROM service_warranties sw WHERE sw.request_id=?""",(request_id,)).fetchone(); c.close()
+    service={'status':info['status'],'payment_status':info['payment_status'],'completed_at':info['completed_at'],'paid_at':info['paid_at'],'service_name':info['service_name'],'provider_name':info['provider_name']} if info else None
+    if not row:
+        if info and info['status']=='COMPLETED' and info['payment_status']=='PAID': reason='This service was completed before warranties were introduced, so no warranty record exists.'
+        elif info and info['status']=='COMPLETED': reason='The warranty starts once payment for this service is verified.'
+        elif info and info['status'] in ('CANCELLED','REJECTED','EXPIRED'): reason='Cancelled services do not carry a warranty.'
+        else: reason='The 7-day workmanship warranty is issued automatically after the service is completed and paid.'
+        return jsonify(success=True,warranty=None,service=service,reason=reason)
+    w=dict(row)
+    w['status']='ACTIVE' if w.get('active_now') else 'EXPIRED'
+    w['days_remaining']=max(0,int(w.get('days_remaining') or 0)) if w.get('active_now') else 0
+    return jsonify(success=True,warranty=w,service=service)
 
 @app.route('/api/provider/<int:provider_id>/favorite')
 def favorite_status(provider_id):
@@ -2925,31 +3330,37 @@ def live_service(request_id):
     provider_user=conn.execute("SELECT user_id FROM providers WHERE id=?",(row['provider_id'],)).fetchone() if row['provider_id'] else None
     if session['user_id'] not in {row['customer_id'], provider_user['user_id'] if provider_user else -1}:
         conn.close(); return "Not authorized",403
-    conn.close(); return render_template('live_service.html',service=row,role=session['role'])
+    service=dict(row); service['provider_photo_url']=None
+    if provider_user:
+        pu=conn.execute("SELECT profile_photo_path FROM users WHERE id=?",(provider_user['user_id'],)).fetchone()
+        service['provider_photo_url']=media_url(pu['profile_photo_path']) if pu and pu['profile_photo_path'] else None
+    conn.close(); return render_template('live_service.html',service=service,role=session['role'])
 
 @app.route('/api/service/<int:request_id>/route')
 def service_route(request_id):
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
     conn=get_db_connection()
-    row=conn.execute("""SELECT sr.customer_id,sr.provider_id,cu.latitude clat,cu.longitude clon,pu.latitude plat,pu.longitude plon,
-        cu.location_source csource,pu.location_source psource,cu.name customer_name,pu.name provider_name
-        FROM service_requests sr JOIN users cu ON cu.id=sr.customer_id
-        LEFT JOIN providers p ON p.id=sr.provider_id LEFT JOIN users pu ON pu.id=p.user_id WHERE sr.id=?""",(request_id,)).fetchone()
-    if not row: conn.close(); return jsonify(success=False,message='Not found'),404
-    provider_user=conn.execute("SELECT user_id FROM providers WHERE id=?",(row['provider_id'],)).fetchone() if row['provider_id'] else None
-    if session['user_id'] not in {row['customer_id'], provider_user['user_id'] if provider_user else -1}:
-        conn.close(); return jsonify(success=False,message='Not authorized'),403
-    conn.close()
-    return jsonify(success=True,customer={'lat':row['clat'],'lon':row['clon'],'name':row['customer_name']},provider={'lat':row['plat'],'lon':row['plon'],'name':row['provider_name']})
+    try:
+        data,error=_tracking_snapshot(conn,request_id,session['user_id'])
+    finally:
+        conn.close()
+    if error: return jsonify(success=False,message=error[0]),error[1]
+    # Backward-compatible shape for older clients plus the full tracking payload.
+    data['customer'].update({'lat':data['customer']['latitude'],'lon':data['customer']['longitude']})
+    data['provider'].update({'lat':data['provider']['latitude'],'lon':data['provider']['longitude']})
+    return jsonify(data)
 
 @app.route('/provider/earnings')
 def provider_earnings():
     if not _require_role('provider'): return redirect(url_for('login'))
     conn=get_db_connection(); pid=_provider_id_for_user(conn,session['user_id'])
     _award_provider_metrics(conn,pid) if pid else None
-    rows=conn.execute("SELECT * FROM provider_earnings WHERE provider_id=? ORDER BY created_at DESC LIMIT 100",(pid,)).fetchall() if pid else []
-    summary=conn.execute("SELECT COALESCE(SUM(gross_amount),0) gross,COALESCE(SUM(platform_fee),0) fee,COALESCE(SUM(net_amount),0) net FROM provider_earnings WHERE provider_id=?",(pid,)).fetchone() if pid else {'gross':0,'fee':0,'net':0}
-    conn.commit(); conn.close(); return render_template('provider_earnings.html',rows=rows,summary=summary)
+    rows=conn.execute("SELECT e.*,s.name service_name,cu.name customer_name FROM provider_earnings e LEFT JOIN service_requests sr ON sr.id=e.request_id LEFT JOIN services s ON s.id=sr.service_id LEFT JOIN users cu ON cu.id=sr.customer_id WHERE e.provider_id=? ORDER BY e.created_at DESC LIMIT 100",(pid,)).fetchall() if pid else []
+    summary=conn.execute("SELECT COALESCE(SUM(gross_amount),0) gross,COALESCE(SUM(platform_fee),0) fee,COALESCE(SUM(net_amount),0) net,COUNT(*) jobs FROM provider_earnings WHERE provider_id=?",(pid,)).fetchone() if pid else {'gross':0,'fee':0,'net':0,'jobs':0}
+    monthly=conn.execute("SELECT strftime('%Y-%m',created_at) month,COALESCE(SUM(net_amount),0) net,COUNT(*) jobs FROM provider_earnings WHERE provider_id=? GROUP BY month ORDER BY month DESC LIMIT 6",(pid,)).fetchall() if pid else []
+    pending=conn.execute("SELECT COALESCE(SUM(net_amount),0) net FROM provider_earnings WHERE provider_id=? AND payout_status='PENDING'",(pid,)).fetchone() if pid else {'net':0}
+    awaiting=conn.execute("SELECT sr.id,sr.agreed_amount,s.name service_name,sr.status FROM service_requests sr JOIN services s ON s.id=sr.service_id WHERE sr.provider_id=? AND sr.status IN ('AWAITING_VERIFICATION','AWAITING_PAYMENT') ORDER BY sr.created_at DESC",(pid,)).fetchall() if pid else []
+    conn.commit(); conn.close(); return render_template('provider_earnings.html',rows=rows,summary=summary,monthly=monthly,pending=pending,awaiting=awaiting)
 
 @app.route('/provider/reviews-center')
 def provider_reviews_center():
@@ -2957,19 +3368,45 @@ def provider_reviews_center():
     conn=get_db_connection(); pid=_provider_id_for_user(conn,session['user_id'])
     rows=conn.execute("SELECT r.rating,r.review,r.created_at,u.name customer_name,s.name service_name FROM reviews r JOIN users u ON u.id=r.customer_id JOIN service_requests sr ON sr.id=r.request_id JOIN services s ON s.id=sr.service_id WHERE r.provider_id=? ORDER BY r.created_at DESC",(pid,)).fetchall()
     avg=conn.execute("SELECT COALESCE(AVG(rating),0) avg,COUNT(*) cnt FROM reviews WHERE provider_id=?",(pid,)).fetchone()
-    conn.close(); return render_template('provider_reviews_center.html',rows=rows,avg=avg)
+    dist={r['rating']:r['c'] for r in conn.execute("SELECT rating,COUNT(*) c FROM reviews WHERE provider_id=? GROUP BY rating",(pid,)).fetchall()}
+    distribution=[{'stars':s,'count':dist.get(s,0),'pct':round(100*dist.get(s,0)/avg['cnt']) if avg['cnt'] else 0} for s in (5,4,3,2,1)]
+    conn.close(); return render_template('provider_reviews_center.html',rows=rows,avg=avg,distribution=distribution)
 
 @app.route('/provider/portfolio',methods=['GET','POST'])
 def provider_portfolio():
     if not _require_role('provider'): return redirect(url_for('login'))
     conn=get_db_connection(); pid=_provider_id_for_user(conn,session['user_id'])
+    if not pid:
+        conn.close(); flash('Provider profile not found.'); return redirect(url_for('provider_dashboard'))
     if request.method=='POST':
         f=request.files.get('image'); title=request.form.get('title','').strip()[:120]; desc=request.form.get('description','').strip()[:500]
-        if not f or not f.filename or not allowed_file(f.filename) or not title:
-            conn.close(); flash('Add a title and JPG/PNG/WEBP portfolio image.'); return redirect(url_for('provider_portfolio'))
-        filename=secure_filename(f"portfolio_{pid}_{uuid.uuid4().hex}.{f.filename.rsplit('.',1)[1].lower()}"); os.makedirs(app.config['UPLOAD_FOLDER'],exist_ok=True); f.save(os.path.join(app.config['UPLOAD_FOLDER'],filename))
-        conn.execute("INSERT INTO portfolio_items(provider_id,title,description,image_path) VALUES(?,?,?,?)",(pid,title,desc,'uploads/'+filename)); conn.commit(); conn.close(); flash('Portfolio item added.'); return redirect(url_for('provider_portfolio'))
-    rows=conn.execute('SELECT * FROM portfolio_items WHERE provider_id=? ORDER BY created_at DESC',(pid,)).fetchall(); conn.close(); return render_template('provider_portfolio.html',rows=rows)
+        if not title:
+            conn.close(); flash('Add a short title for this portfolio item.'); return redirect(url_for('provider_portfolio'))
+        try:
+            rel_path=_save_public_image(f,f"portfolio_{pid}")
+        except ValueError as exc:
+            conn.close(); flash(str(exc)); return redirect(url_for('provider_portfolio'))
+        conn.execute("INSERT INTO portfolio_items(provider_id,title,description,image_path) VALUES(?,?,?,?)",(pid,title,desc,rel_path)); conn.commit(); conn.close()
+        flash('Portfolio item added. Customers can now see it on your profile.'); return redirect(url_for('provider_portfolio'))
+    rows=conn.execute('SELECT * FROM portfolio_items WHERE provider_id=? ORDER BY created_at DESC',(pid,)).fetchall(); conn.close()
+    return render_template('provider_portfolio.html',rows=rows,provider_id=pid)
+
+@app.route('/provider/portfolio/<int:item_id>/delete',methods=['POST'])
+def provider_portfolio_delete(item_id):
+    if not _require_role('provider'):
+        return jsonify(success=False,message='Provider login required'),401
+    conn=get_db_connection(); pid=_provider_id_for_user(conn,session['user_id'])
+    row=conn.execute('SELECT id,image_path FROM portfolio_items WHERE id=? AND provider_id=?',(item_id,pid)).fetchone()
+    if not row:
+        conn.close()
+        if request.is_json or request.headers.get('X-Requested-With')=='fetch':
+            return jsonify(success=False,message='Portfolio item not found.'),404
+        flash('Portfolio item not found.'); return redirect(url_for('provider_portfolio'))
+    conn.execute('DELETE FROM portfolio_items WHERE id=? AND provider_id=?',(item_id,pid)); conn.commit(); conn.close()
+    _delete_media(row['image_path'])
+    if request.is_json or request.headers.get('X-Requested-With')=='fetch':
+        return jsonify(success=True,message='Portfolio item removed.')
+    flash('Portfolio item removed.'); return redirect(url_for('provider_portfolio'))
 
 @app.route('/favorites/<int:provider_id>/toggle',methods=['POST'])
 def toggle_favorite(provider_id):
@@ -2981,58 +3418,184 @@ def toggle_favorite(provider_id):
 
 @app.route('/api/provider/<int:provider_id>/portfolio')
 def provider_portfolio_api(provider_id):
-    conn=get_db_connection(); rows=conn.execute('SELECT title,description,image_path,created_at FROM portfolio_items WHERE provider_id=? ORDER BY created_at DESC',(provider_id,)).fetchall(); conn.close(); return jsonify(success=True,items=[dict(r) for r in rows])
+    if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
+    conn=get_db_connection(); rows=conn.execute('SELECT p.title,p.description,p.image_path,p.created_at FROM portfolio_items p JOIN providers pr ON pr.id=p.provider_id WHERE p.provider_id=? AND pr.approved=1 ORDER BY p.created_at DESC',(provider_id,)).fetchall(); conn.close()
+    items=[]
+    for r in rows:
+        d=dict(r); d['image_url']=media_url(d.pop('image_path'))
+        items.append(d)
+    return jsonify(success=True,items=items)
 
-@app.route('/api/trusted-contact',methods=['POST'])
+def _normalize_phone(raw):
+    value = str(raw or "").strip()
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) < 10 or len(digits) > 15:
+        return None
+    return ("+" + digits) if value.startswith("+") else digits
+
+
+def _participant_request(conn, request_id, user_id):
+    """Return (row, role) if user_id is the customer or assigned provider of request_id."""
+    row = conn.execute("""
+        SELECT sr.id, sr.customer_id, sr.provider_id, sr.status, sr.service_id, p.user_id AS provider_user_id
+        FROM service_requests sr LEFT JOIN providers p ON p.id = sr.provider_id WHERE sr.id = ?
+    """, (request_id,)).fetchone()
+    if not row:
+        return None, None
+    if int(row["customer_id"]) == int(user_id):
+        return row, "customer"
+    if row["provider_user_id"] is not None and int(row["provider_user_id"]) == int(user_id):
+        return row, "provider"
+    return None, None
+
+
+@app.route('/api/trusted-contact', methods=['GET', 'POST'])
 def trusted_contact():
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
-    d=request.get_json(silent=True) or {}; name=str(d.get('name','')).strip()[:100]; phone=str(d.get('phone','')).strip()[:30]; rel=str(d.get('relationship','')).strip()[:50]
-    if not name or not phone: return jsonify(success=False,message='Name and phone are required'),400
-    conn=get_db_connection(); conn.execute('INSERT OR REPLACE INTO trusted_contacts(user_id,name,phone,relationship) VALUES(?,?,?,?)',(session['user_id'],name,phone,rel)); conn.commit(); conn.close(); return jsonify(success=True)
+    conn=get_db_connection()
+    if request.method=='POST':
+        d=request.get_json(silent=True) or {}
+        name=str(d.get('name','')).strip()[:100]; rel=str(d.get('relationship','')).strip()[:50]
+        phone=_normalize_phone(d.get('phone'))
+        if len(name)<2: conn.close(); return jsonify(success=False,message='Enter the contact\'s name (at least 2 characters).'),400
+        if not phone: conn.close(); return jsonify(success=False,message='Enter a valid phone number with 10 to 15 digits.'),400
+        count=conn.execute('SELECT COUNT(*) c FROM trusted_contacts WHERE user_id=?',(session['user_id'],)).fetchone()['c']
+        existing=conn.execute('SELECT id FROM trusted_contacts WHERE user_id=? AND phone=?',(session['user_id'],phone)).fetchone()
+        if existing:
+            conn.execute('UPDATE trusted_contacts SET name=?,relationship=? WHERE id=? AND user_id=?',(name,rel or None,existing['id'],session['user_id']))
+            message='Trusted contact updated.'
+        else:
+            if count>=5: conn.close(); return jsonify(success=False,message='You can save up to 5 trusted contacts. Remove one to add another.'),400
+            conn.execute('INSERT INTO trusted_contacts(user_id,name,phone,relationship) VALUES(?,?,?,?)',(session['user_id'],name,phone,rel or None))
+            message='Trusted contact saved.'
+        # Mirror the most recent contact onto the user row for legacy readers.
+        conn.execute('UPDATE users SET trusted_contact_name=?,trusted_contact_phone=? WHERE id=?',(name,phone,session['user_id']))
+        conn.commit()
+    contacts=conn.execute('SELECT id,name,phone,relationship,created_at FROM trusted_contacts WHERE user_id=? ORDER BY created_at DESC',(session['user_id'],)).fetchall()
+    conn.close()
+    return jsonify(success=True,message=message if request.method=='POST' else None,trusted_contacts=[dict(c) for c in contacts])
 
-@app.route('/api/sos/<int:request_id>',methods=['POST'])
+
+@app.route('/api/sos/<int:request_id>', methods=['POST'])
 def sos(request_id):
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
-    conn=get_db_connection(); row=conn.execute('SELECT customer_id,provider_id FROM service_requests WHERE id=?',(request_id,)).fetchone()
-    if not row: conn.close(); return jsonify(success=False,message='Request not found'),404
-    pid_user=conn.execute('SELECT user_id FROM providers WHERE id=?',(row['provider_id'],)).fetchone() if row['provider_id'] else None
-    if session['user_id'] not in {row['customer_id'],pid_user['user_id'] if pid_user else -1}: conn.close(); return jsonify(success=False,message='Not authorized'),403
+    d=request.get_json(silent=True) or {}
+    conn=get_db_connection()
+    row,role=_participant_request(conn,request_id,session['user_id'])
+    if not row: conn.close(); return jsonify(success=False,message='You are not part of this service.'),403
+    if row['status'] not in TRACKING_ACTIVE_STATUSES:
+        conn.close(); return jsonify(success=False,message='SOS is available only while a service is active. If you are in danger, call 112.'),409
+    recent=conn.execute("SELECT id FROM sos_events WHERE request_id=? AND user_id=? AND status='OPEN' AND created_at>=datetime('now','-2 minute')",(request_id,session['user_id'])).fetchone()
+    if recent:
+        conn.close(); return jsonify(success=True,message='Your SOS alert is already open and the operations team has been notified. Call 112 if you are in immediate danger.',emergency_number='112',sos_id=recent['id'],duplicate=True)
+    lat=lon=None
+    try:
+        if d.get('latitude') is not None and d.get('longitude') is not None:
+            lat=float(d['latitude']); lon=float(d['longitude'])
+            if not (-90<=lat<=90 and -180<=lon<=180): lat=lon=None
+    except (TypeError,ValueError): lat=lon=None
+    if lat is None:
+        u=conn.execute('SELECT latitude,longitude,location_updated_at FROM users WHERE id=?',(session['user_id'],)).fetchone()
+        age=_location_age_seconds(u['location_updated_at']) if u else None
+        if u and u['latitude'] is not None and age is not None and age<=STALE_LOCATION_SECONDS:
+            lat,lon=float(u['latitude']),float(u['longitude'])
+    note=str(d.get('message','')).strip()[:300]
     contact=conn.execute("SELECT name,phone,relationship FROM trusted_contacts WHERE user_id=? ORDER BY created_at DESC LIMIT 1",(session['user_id'],)).fetchone()
-    conn.execute("INSERT INTO admin_alerts(severity,title,message,request_id,user_id) VALUES('HIGH','SOS triggered',?,?,?)",(request_id,f'SOS triggered for service request #{request_id}',session['user_id']))
-    conn.commit(); conn.close(); return jsonify(success=True,message='SOS alert sent to SmartServe operations. If you are in immediate danger, call India emergency services at 112.',emergency_number='112',trusted_contact=dict(contact) if contact else None)
+    service=conn.execute("SELECT s.name FROM services s WHERE s.id=?",(row['service_id'],)).fetchone()
+    cur=conn.execute("INSERT INTO sos_events(request_id,user_id,role,latitude,longitude,message,trusted_contact_name,trusted_contact_phone) VALUES(?,?,?,?,?,?,?,?)",
+                     (request_id,session['user_id'],role,lat,lon,note or None,contact['name'] if contact else None,contact['phone'] if contact else None))
+    sos_id=cur.lastrowid
+    who='Customer' if role=='customer' else 'Provider'
+    alert_message=f"{who} {session.get('user_name','')} triggered SOS on service #{request_id} ({service['name'] if service else 'service'})."
+    if lat is not None: alert_message+=f" Last known location {lat:.5f}, {lon:.5f}."
+    else: alert_message+=" No recent GPS location available."
+    if note: alert_message+=f" Note: {note}"
+    conn.execute("INSERT INTO admin_alerts(severity,title,message,request_id,user_id) VALUES('HIGH','SOS triggered',?,?,?)",(alert_message,request_id,session['user_id']))
+    _log_event(conn,request_id,session['user_id'],'SOS_TRIGGERED',alert_message,{'sos_id':sos_id,'latitude':lat,'longitude':lon})
+    conn.commit(); conn.close()
+    if socketio:
+        socketio.emit('sos_alert',{'sos_id':sos_id,'request_id':request_id,'role':role,'message':alert_message,'latitude':lat,'longitude':lon},to='admins')
+    return jsonify(success=True,sos_id=sos_id,message='SOS alert sent to SmartServe operations with your service details' + (' and last known location.' if lat is not None else '. Share your location for faster help.') + ' If you are in immediate danger, call 112 now.',emergency_number='112',trusted_contact=dict(contact) if contact else None,location_included=lat is not None)
 
-@app.route('/api/disputes',methods=['POST'])
+
+@app.route('/api/sos/mine')
+def my_sos_events():
+    if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
+    conn=get_db_connection()
+    rows=conn.execute("SELECT e.id,e.request_id,e.status,e.created_at,e.acknowledged_at,e.latitude,e.longitude,s.name service_name FROM sos_events e JOIN service_requests sr ON sr.id=e.request_id JOIN services s ON s.id=sr.service_id WHERE e.user_id=? ORDER BY e.created_at DESC LIMIT 20",(session['user_id'],)).fetchall()
+    conn.close(); return jsonify(success=True,events=[dict(r) for r in rows])
+
+
+DISPUTE_REASONS=['Incomplete work','Damage to property','Overcharging','Provider did not arrive','Customer not available','Payment issue','Unprofessional behaviour','Safety concern','Other']
+DISPUTE_ELIGIBLE_STATUSES=TRACKING_ACTIVE_STATUSES+('COMPLETED','CANCELLED','REJECTED')
+
+
+@app.route('/api/disputes', methods=['GET','POST'])
 def create_dispute():
     if 'user_id' not in session: return jsonify(success=False,message='Login required'),401
-    d=request.get_json(silent=True) or {}; rid=int(d.get('request_id') or 0); reason=str(d.get('reason','')).strip()[:120]; desc=str(d.get('description','')).strip()[:1000]
-    conn=get_db_connection(); row=conn.execute('SELECT customer_id,provider_id FROM service_requests WHERE id=?',(rid,)).fetchone();
-    if not row: conn.close(); return jsonify(success=False,message='Request not found'),404
-    pid_user=conn.execute('SELECT user_id FROM providers WHERE id=?',(row['provider_id'],)).fetchone() if row['provider_id'] else None
-    if session['user_id'] not in {row['customer_id'],pid_user['user_id'] if pid_user else -1}: conn.close(); return jsonify(success=False,message='Not authorized'),403
-    if not reason: conn.close(); return jsonify(success=False,message='Reason required'),400
-    conn.execute('INSERT INTO disputes(request_id,opened_by,reason,description) VALUES(?,?,?,?)',(rid,session['user_id'],reason,desc)); conn.execute("INSERT INTO admin_alerts(severity,title,message,request_id,user_id) VALUES('MEDIUM',?,?,?,?)",('New dispute',reason,rid,session['user_id'])); conn.commit(); conn.close(); return jsonify(success=True,message='Dispute opened.')
+    conn=get_db_connection()
+    if request.method=='POST':
+        d=request.get_json(silent=True) or {}
+        try: rid=int(d.get('request_id') or 0)
+        except (TypeError,ValueError): rid=0
+        reason=str(d.get('reason','')).strip()[:120]; desc=str(d.get('description','')).strip()[:1000]
+        row,role=_participant_request(conn,rid,session['user_id'])
+        if not row: conn.close(); return jsonify(success=False,message='Select one of your own services.'),403
+        if row['status'] not in DISPUTE_ELIGIBLE_STATUSES: conn.close(); return jsonify(success=False,message='A dispute can be opened only for an assigned, active or completed service.'),409
+        if reason not in DISPUTE_REASONS: conn.close(); return jsonify(success=False,message='Choose a valid issue type.'),400
+        if len(desc)<10: conn.close(); return jsonify(success=False,message='Describe the issue in at least 10 characters so our team can help.'),400
+        if conn.execute("SELECT id FROM disputes WHERE request_id=? AND opened_by=? AND status='OPEN'",(rid,session['user_id'])).fetchone():
+            conn.close(); return jsonify(success=False,message='You already have an open dispute for this service. Our team will contact you.'),409
+        cur=conn.execute('INSERT INTO disputes(request_id,opened_by,reason,description) VALUES(?,?,?,?)',(rid,session['user_id'],reason,desc))
+        dispute_id=cur.lastrowid
+        conn.execute("INSERT INTO admin_alerts(severity,title,message,request_id,user_id) VALUES('MEDIUM','New dispute',?,?,?)",(f"{reason} — reported by {'customer' if role=='customer' else 'provider'} on service #{rid}: {desc[:160]}",rid,session['user_id']))
+        _log_event(conn,rid,session['user_id'],'DISPUTE_OPENED',reason,{'dispute_id':dispute_id})
+        conn.commit()
+        if socketio: socketio.emit('dispute_opened',{'dispute_id':dispute_id,'request_id':rid,'reason':reason},to='admins')
+        message=f'Dispute #{dispute_id} opened. SmartServe operations will review it and contact you.'
+    rows=conn.execute("SELECT d.id,d.request_id,d.reason,d.description,d.status,d.resolution,d.created_at,d.updated_at,s.name service_name FROM disputes d JOIN service_requests sr ON sr.id=d.request_id JOIN services s ON s.id=sr.service_id WHERE d.opened_by=? ORDER BY d.created_at DESC LIMIT 30",(session['user_id'],)).fetchall()
+    conn.close()
+    return jsonify(success=True,message=message if request.method=='POST' else None,disputes=[dict(r) for r in rows],reasons=DISPUTE_REASONS)
+
 
 @app.route('/api/safety-tools', methods=['GET'])
 def safety_tools():
     if 'user_id' not in session:
         return jsonify(success=False, message='Login required'), 401
     conn = get_db_connection()
-    u = conn.execute('SELECT preferred_language, low_bandwidth_mode, phone FROM users WHERE id=?', (session['user_id'],)).fetchone()
-    contacts = conn.execute('SELECT id,name,phone,relationship FROM trusted_contacts WHERE user_id=? ORDER BY created_at DESC', (session['user_id'],)).fetchall()
+    u = conn.execute('SELECT name, preferred_language, low_bandwidth_mode, phone FROM users WHERE id=?', (session['user_id'],)).fetchone()
+    contacts = conn.execute('SELECT id,name,phone,relationship,created_at FROM trusted_contacts WHERE user_id=? ORDER BY created_at DESC', (session['user_id'],)).fetchall()
+    active_statuses = "('ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')"
     if session.get('role') == 'customer':
-        requests = conn.execute("""SELECT sr.id,sr.status,sr.route_status,s.name service_name,pu.name provider_name
-            FROM service_requests sr JOIN services s ON s.id=sr.service_id
-            LEFT JOIN providers p ON p.id=sr.provider_id LEFT JOIN users pu ON pu.id=p.user_id
-            WHERE sr.customer_id=? AND sr.status IN ('ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')
-            ORDER BY sr.created_at DESC LIMIT 20""", (session['user_id'],)).fetchall()
+        base = """SELECT sr.id,sr.status,sr.route_status,sr.created_at,sr.completed_at,sr.warranty_days,sr.warranty_until,sr.payment_status,
+                     s.name service_name,pu.name provider_name,pu.phone provider_phone,
+                     (SELECT COUNT(*) FROM disputes d WHERE d.request_id=sr.id AND d.status='OPEN') open_disputes
+              FROM service_requests sr JOIN services s ON s.id=sr.service_id
+              LEFT JOIN providers p ON p.id=sr.provider_id LEFT JOIN users pu ON pu.id=p.user_id
+              WHERE sr.customer_id=? """
     else:
-        requests = conn.execute("""SELECT sr.id,sr.status,sr.route_status,s.name service_name,cu.name customer_name
-            FROM service_requests sr JOIN services s ON s.id=sr.service_id
-            JOIN providers p ON p.id=sr.provider_id JOIN users cu ON cu.id=sr.customer_id
-            WHERE p.user_id=? AND sr.status IN ('ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')
-            ORDER BY sr.created_at DESC LIMIT 20""", (session['user_id'],)).fetchall()
+        base = """SELECT sr.id,sr.status,sr.route_status,sr.created_at,sr.completed_at,sr.warranty_days,sr.warranty_until,sr.payment_status,
+                     s.name service_name,cu.name customer_name,cu.phone customer_phone,
+                     (SELECT COUNT(*) FROM disputes d WHERE d.request_id=sr.id AND d.status='OPEN') open_disputes
+              FROM service_requests sr JOIN services s ON s.id=sr.service_id
+              JOIN providers p ON p.id=sr.provider_id JOIN users cu ON cu.id=sr.customer_id
+              WHERE p.user_id=? """
+    active = conn.execute(base + f"AND sr.status IN {active_statuses} ORDER BY sr.created_at DESC LIMIT 20", (session['user_id'],)).fetchall()
+    completed = conn.execute(base + "AND sr.status='COMPLETED' ORDER BY COALESCE(sr.completed_at,sr.created_at) DESC LIMIT 20", (session['user_id'],)).fetchall()
+    disputes = conn.execute("SELECT d.id,d.request_id,d.reason,d.status,d.resolution,d.created_at,s.name service_name FROM disputes d JOIN service_requests sr ON sr.id=d.request_id JOIN services s ON s.id=sr.service_id WHERE d.opened_by=? ORDER BY d.created_at DESC LIMIT 20", (session['user_id'],)).fetchall()
+    sos_rows = conn.execute("SELECT e.id,e.request_id,e.status,e.created_at,e.acknowledged_at FROM sos_events e WHERE e.user_id=? ORDER BY e.created_at DESC LIMIT 10", (session['user_id'],)).fetchall()
+    warranties = conn.execute("""SELECT sw.request_id,sw.warranty_days,sw.warranty_until,sw.status,sw.terms,sw.created_at,s.name service_name,
+                                 CASE WHEN datetime(sw.warranty_until) >= datetime('now') THEN 1 ELSE 0 END AS active_now
+                                 FROM service_warranties sw JOIN service_requests sr ON sr.id=sw.request_id JOIN services s ON s.id=sr.service_id
+                                 WHERE sr.customer_id=? OR sr.provider_id IN (SELECT id FROM providers WHERE user_id=?)
+                                 ORDER BY sw.created_at DESC LIMIT 20""", (session['user_id'], session['user_id'])).fetchall()
     conn.close()
-    return jsonify(success=True, role=session.get('role'), user=dict(u) if u else {}, trusted_contacts=[dict(x) for x in contacts], active_services=[dict(x) for x in requests])
+    return jsonify(success=True, role=session.get('role'), user=dict(u) if u else {},
+                   trusted_contacts=[dict(x) for x in contacts], active_services=[dict(x) for x in active],
+                   completed_services=[dict(x) for x in completed], disputes=[dict(x) for x in disputes],
+                   sos_events=[dict(x) for x in sos_rows], warranties=[dict(x) for x in warranties],
+                   dispute_reasons=DISPUTE_REASONS, emergency_number='112')
+
 
 @app.route('/api/trusted-contact/<int:contact_id>', methods=['DELETE'])
 def delete_trusted_contact(contact_id):
@@ -3040,8 +3603,10 @@ def delete_trusted_contact(contact_id):
         return jsonify(success=False, message='Login required'), 401
     conn=get_db_connection()
     cur=conn.execute('DELETE FROM trusted_contacts WHERE id=? AND user_id=?',(contact_id,session['user_id']))
+    latest=conn.execute('SELECT name,phone FROM trusted_contacts WHERE user_id=? ORDER BY created_at DESC LIMIT 1',(session['user_id'],)).fetchone()
+    conn.execute('UPDATE users SET trusted_contact_name=?,trusted_contact_phone=? WHERE id=?',(latest['name'] if latest else None,latest['phone'] if latest else None,session['user_id']))
     conn.commit(); conn.close()
-    return jsonify(success=bool(cur.rowcount), message='Trusted contact removed.' if cur.rowcount else 'Contact not found.')
+    return jsonify(success=bool(cur.rowcount), message='Trusted contact removed.' if cur.rowcount else 'Contact not found.'), (200 if cur.rowcount else 404)
 
 @app.route('/api/preferences',methods=['POST'])
 def preferences():
@@ -3049,13 +3614,48 @@ def preferences():
     d=request.get_json(silent=True) or {}; lang=str(d.get('language','en'))[:10]; low=1 if d.get('low_bandwidth') else 0
     conn=get_db_connection(); conn.execute('UPDATE users SET preferred_language=?,low_bandwidth_mode=? WHERE id=?',(lang,low,session['user_id'])); conn.commit(); conn.close(); return jsonify(success=True)
 
-@app.route('/bookings/repeat',methods=['POST'])
+REPEAT_FREQUENCIES={'WEEKLY':'+7 day','MONTHLY':'+30 day','QUARTERLY':'+90 day'}
+
+@app.route('/bookings/repeat',methods=['GET','POST'])
 def repeat_booking():
     if not _require_role('customer'): return jsonify(success=False,message='Customer login required'),401
-    d=request.get_json(silent=True) or {}; rid=int(d.get('request_id') or 0); freq=str(d.get('frequency','MONTHLY')).upper(); notes=str(d.get('notes','')).strip()[:500]
-    conn=get_db_connection(); row=conn.execute('SELECT service_id,provider_id FROM service_requests WHERE id=? AND customer_id=?',(rid,session['user_id'])).fetchone()
-    if not row: conn.close(); return jsonify(success=False,message='Booking not found'),404
-    conn.execute('INSERT INTO recurring_bookings(customer_id,provider_id,service_id,frequency,next_run_at,notes) VALUES(?,?,?,?,datetime(\'now\',\'+30 day\'),?)',(session['user_id'],row['provider_id'],row['service_id'],freq,notes)); conn.commit(); conn.close(); return jsonify(success=True,message='Repeat service plan created.')
+    conn=get_db_connection()
+    if request.method=='POST':
+        d=request.get_json(silent=True) or {}
+        try: rid=int(d.get('request_id') or 0)
+        except (TypeError,ValueError): rid=0
+        freq=str(d.get('frequency','MONTHLY')).upper(); notes=str(d.get('notes','')).strip()[:500]
+        if freq not in REPEAT_FREQUENCIES: conn.close(); return jsonify(success=False,message='Choose weekly, monthly or quarterly.'),400
+        row=conn.execute("SELECT sr.service_id,sr.provider_id,sr.status,s.name service_name FROM service_requests sr JOIN services s ON s.id=sr.service_id WHERE sr.id=? AND sr.customer_id=?",(rid,session['user_id'])).fetchone()
+        if not row: conn.close(); return jsonify(success=False,message='Choose one of your own bookings.'),404
+        if row['status']!='COMPLETED': conn.close(); return jsonify(success=False,message='Repeat plans can only be created from completed bookings.'),409
+        if conn.execute("SELECT id FROM recurring_bookings WHERE customer_id=? AND service_id=? AND COALESCE(provider_id,0)=COALESCE(?,0) AND active=1",(session['user_id'],row['service_id'],row['provider_id'])).fetchone():
+            conn.close(); return jsonify(success=False,message='You already have an active repeat plan for this service and provider.'),409
+        conn.execute(f"INSERT INTO recurring_bookings(customer_id,provider_id,service_id,frequency,next_run_at,notes) VALUES(?,?,?,?,datetime('now','{REPEAT_FREQUENCIES[freq]}'),?)",(session['user_id'],row['provider_id'],row['service_id'],freq,notes))
+        conn.commit()
+        message=f"{freq.capitalize()} repeat plan created for {row['service_name']}. Upcoming visits appear on your dashboard with a one-tap rebook."
+    rows=conn.execute("SELECT rb.id,rb.frequency,rb.next_run_at,CASE WHEN rb.active=1 THEN 'ACTIVE' ELSE 'CANCELLED' END status,rb.notes,rb.created_at,s.name service_name,pu.name provider_name FROM recurring_bookings rb JOIN services s ON s.id=rb.service_id LEFT JOIN providers p ON p.id=rb.provider_id LEFT JOIN users pu ON pu.id=p.user_id WHERE rb.customer_id=? ORDER BY rb.created_at DESC",(session['user_id'],)).fetchall()
+    conn.close()
+    return jsonify(success=True,message=message if request.method=='POST' else None,plans=[dict(r) for r in rows])
+
+@app.route('/bookings/repeat/<int:plan_id>/cancel',methods=['POST'])
+def cancel_repeat_booking(plan_id):
+    if not _require_role('customer'): return jsonify(success=False,message='Customer login required'),401
+    conn=get_db_connection(); cur=conn.execute("UPDATE recurring_bookings SET active=0 WHERE id=? AND customer_id=? AND active=1",(plan_id,session['user_id'])); conn.commit(); conn.close()
+    return (jsonify(success=True,message='Repeat plan cancelled.') if cur.rowcount else (jsonify(success=False,message='Plan not found.'),404))
+
+@app.route('/api/favorites')
+def favorites_list():
+    if not _require_role('customer'): return jsonify(success=False,message='Customer login required'),401
+    conn=get_db_connection()
+    rows=conn.execute("""SELECT p.id provider_id,p.rating,p.experience,p.skills,u.name,u.is_online,u.profile_photo_path,
+        (SELECT COUNT(*) FROM reviews rv WHERE rv.provider_id=p.id) review_count
+        FROM favorite_providers f JOIN providers p ON p.id=f.provider_id JOIN users u ON u.id=p.user_id WHERE f.customer_id=? ORDER BY f.created_at DESC""",(session['user_id'],)).fetchall()
+    conn.close()
+    out=[]
+    for r in rows:
+        d=dict(r); d['photo_url']=media_url(d.pop('profile_photo_path')); out.append(d)
+    return jsonify(success=True,favorites=out)
 
 @app.route('/admin/operations')
 def admin_operations():
@@ -3065,12 +3665,46 @@ def admin_operations():
       'users':conn.execute("SELECT COUNT(*) c FROM users").fetchone()['c'],
       'online_providers':conn.execute("SELECT COUNT(*) c FROM users WHERE role='provider' AND is_online=1").fetchone()['c'],
       'active_services':conn.execute("SELECT COUNT(*) c FROM service_requests WHERE status IN ('ASSIGNED','ACCEPTED','ARRIVED','IN_PROGRESS','AWAITING_VERIFICATION','AWAITING_PAYMENT')").fetchone()['c'],
+      'open_sos':conn.execute("SELECT COUNT(*) c FROM sos_events WHERE status='OPEN'").fetchone()['c'],
       'open_disputes':conn.execute("SELECT COUNT(*) c FROM disputes WHERE status='OPEN'").fetchone()['c'],
       'open_fraud':conn.execute("SELECT COUNT(*) c FROM fraud_signals WHERE status='OPEN'").fetchone()['c'],
       'alerts':conn.execute("SELECT COUNT(*) c FROM admin_alerts WHERE status='OPEN'").fetchone()['c'],
     }
-    alerts=conn.execute('SELECT * FROM admin_alerts WHERE status=\'OPEN\' ORDER BY created_at DESC LIMIT 30').fetchall(); fraud=conn.execute('SELECT * FROM fraud_signals WHERE status=\'OPEN\' ORDER BY created_at DESC LIMIT 30').fetchall(); disputes=conn.execute('SELECT * FROM disputes WHERE status=\'OPEN\' ORDER BY created_at DESC LIMIT 30').fetchall(); conn.close()
-    return render_template('admin_operations.html',stats=stats,alerts=alerts,fraud=fraud,disputes=disputes)
+    sos_events=conn.execute("""SELECT e.*,u.name user_name,u.phone user_phone,u.role user_role,s.name service_name,sr.status service_status
+        FROM sos_events e JOIN users u ON u.id=e.user_id JOIN service_requests sr ON sr.id=e.request_id JOIN services s ON s.id=sr.service_id
+        WHERE e.status='OPEN' ORDER BY e.created_at DESC LIMIT 30""").fetchall()
+    alerts=conn.execute("SELECT a.*,u.name user_name FROM admin_alerts a LEFT JOIN users u ON u.id=a.user_id WHERE a.status='OPEN' ORDER BY a.created_at DESC LIMIT 30").fetchall()
+    fraud=conn.execute("SELECT * FROM fraud_signals WHERE status='OPEN' ORDER BY created_at DESC LIMIT 30").fetchall()
+    disputes=conn.execute("""SELECT d.*,u.name opened_by_name,u.role opened_by_role,s.name service_name FROM disputes d JOIN users u ON u.id=d.opened_by
+        JOIN service_requests sr ON sr.id=d.request_id JOIN services s ON s.id=sr.service_id WHERE d.status='OPEN' ORDER BY d.created_at DESC LIMIT 30""").fetchall()
+    pending_kyc=conn.execute("SELECT p.id,p.ekyc_status,u.name FROM providers p JOIN users u ON u.id=p.user_id WHERE p.ekyc_status='SUBMITTED' ORDER BY p.id DESC LIMIT 30").fetchall()
+    conn.close()
+    return render_template('admin_operations.html',stats=stats,alerts=alerts,fraud=fraud,disputes=disputes,sos_events=sos_events,pending_kyc=pending_kyc)
+
+@app.route('/admin/sos/<int:sos_id>/acknowledge', methods=['POST'])
+def admin_sos_acknowledge(sos_id):
+    if not _require_role('admin'): return redirect(url_for('login'))
+    c=get_db_connection()
+    c.execute("UPDATE sos_events SET status='ACKNOWLEDGED',acknowledged_at=CURRENT_TIMESTAMP WHERE id=?",(sos_id,))
+    row=c.execute("SELECT request_id,user_id FROM sos_events WHERE id=?",(sos_id,)).fetchone()
+    if row:
+        c.execute("UPDATE admin_alerts SET status='RESOLVED',resolved_at=CURRENT_TIMESTAMP WHERE request_id=? AND user_id=? AND title='SOS triggered' AND status='OPEN'",(row['request_id'],row['user_id']))
+        _log_event(c,int(row['request_id']),session['user_id'],'SOS_ACKNOWLEDGED','Operations team acknowledged the SOS alert.',{'sos_id':sos_id})
+    c.commit(); c.close()
+    if socketio and row: socketio.emit('sos_acknowledged',{'sos_id':sos_id,'request_id':row['request_id']},to=f"user:{row['user_id']}")
+    flash('SOS alert acknowledged.'); return redirect(url_for('admin_operations'))
+
+@app.route('/admin/alert/<int:alert_id>/resolve', methods=['POST'])
+def admin_alert_resolve(alert_id):
+    if not _require_role('admin'): return redirect(url_for('login'))
+    c=get_db_connection(); c.execute("UPDATE admin_alerts SET status='RESOLVED',resolved_at=CURRENT_TIMESTAMP WHERE id=?",(alert_id,)); c.commit(); c.close()
+    return redirect(url_for('admin_operations'))
+
+@app.route('/admin/kyc/<int:provider_id>/reject', methods=['POST'])
+def admin_reject_kyc(provider_id):
+    if not _require_role('admin'): return redirect(url_for('login'))
+    c=get_db_connection(); c.execute("UPDATE providers SET ekyc_status='REJECTED' WHERE id=?",(provider_id,)); c.execute("DELETE FROM provider_badges WHERE provider_id=? AND badge_key IN ('identity_submitted','identity_verified')",(provider_id,)); c.commit(); c.close()
+    flash('Provider identity document rejected.'); return redirect(url_for('admin_operations'))
 
 @app.route('/admin/fraud-scan')
 def fraud_scan():

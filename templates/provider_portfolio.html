@@ -1,1 +1,40 @@
-{% extends "base.html" %}{% block title %}Provider Portfolio{% endblock %}{% block content %}<div class="page"><div class="greeting"><div><div class="eyebrow">WORK PORTFOLIO</div><h1>Show your previous work</h1><p class="muted">Portfolio images help customers choose you with confidence.</p></div><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">Dashboard</a></div><form class="form-card" method="post" enctype="multipart/form-data"><input class="input" name="title" placeholder="Project title" required><textarea class="input" name="description" placeholder="What did you fix or build?"></textarea><input type="file" name="image" accept="image/*" required><button class="primary-btn">Add portfolio item</button></form><div class="portfolio-grid">{% for r in rows %}<article class="portfolio-card"><img src="{{ url_for('static',filename=r['image_path']) }}"><div><strong>{{ r['title'] }}</strong><p class="muted">{{ r['description'] or '' }}</p></div></article>{% endfor %}</div><style>.portfolio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.portfolio-card{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--card)}.portfolio-card img{width:100%;height:180px;object-fit:cover}.portfolio-card div{padding:12px}@media(max-width:800px){.portfolio-grid{grid-template-columns:1fr 1fr}}@media(max-width:550px){.portfolio-grid{grid-template-columns:1fr}}</style></div>{% endblock %}
+{% extends "base.html" %}
+{% block title %}SmartServe · Portfolio{% endblock %}
+{% block head %}<style>.portfolio-layout{display:grid;grid-template-columns:360px 1fr;gap:18px;align-items:start}@media(max-width:900px){.portfolio-layout{grid-template-columns:1fr}}</style>{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="greeting reveal">
+    <div><span class="eyebrow">Business Hub · Portfolio</span><h1>Show your previous work</h1><div class="muted">Photos of finished jobs help customers choose you with confidence. They appear on your public profile.</div></div>
+    <div class="row"><a class="outline-btn" href="{{ url_for('provider_profile', provider_id=provider_id) }}" target="_blank" rel="noopener">👁 View public profile</a><a class="outline-btn" href="{{ url_for('provider_dashboard') }}">← Dashboard</a></div>
+  </div>
+  <div class="portfolio-layout">
+    <form class="form-card reveal" method="post" enctype="multipart/form-data" id="portfolioForm" data-no-busy onsubmit="return submitPortfolio(event)">
+      <h3 style="margin-top:0">Add a portfolio item</h3>
+      <label>Title<input class="input" name="title" placeholder="e.g. Kitchen sink & tap replacement" required maxlength="120"></label>
+      <label>What did you fix or build? <span class="optional">optional</span><textarea class="input" name="description" maxlength="500" rows="3" placeholder="Short description of the job, materials used, time taken…"></textarea></label>
+      <label class="dropzone" for="portfolioImage"><span class="big">📸</span><strong>Choose a photo</strong><span>JPG, PNG or WEBP · up to 5 MB</span><input id="portfolioImage" type="file" name="image" accept="image/jpeg,image/png,image/webp" required></label>
+      <img id="portfolioPreview" class="upload-preview" alt="Preview">
+      <button class="primary-btn btn-block" style="margin-top:12px" id="portfolioBtn">Add to portfolio</button>
+    </form>
+    <div>
+      <div class="section-head" style="margin-top:0"><h2>Your portfolio <span class="muted" style="font-weight:600">({{ rows|length }})</span></h2></div>
+      <div class="portfolio-grid" id="portfolioGrid">
+        {% for r in rows %}{% set img = media_url(r['image_path']) %}
+        <article class="portfolio-item reveal" id="item-{{ r['id'] }}">
+          {% if img %}<img src="{{ img }}" alt="{{ r['title'] }}" loading="lazy">{% else %}<div style="aspect-ratio:4/3;display:grid;place-items:center;background:var(--card3);color:var(--muted);font-size:12px">Image file missing</div>{% endif %}
+          <div class="body"><strong>{{ r['title'] }}</strong>{% if r['description'] %}<p>{{ r['description'] }}</p>{% endif %}
+            <div class="meta"><span>{{ r['created_at'][:10] if r['created_at'] else '' }}</span><button type="button" class="ghost-btn btn-sm" style="color:var(--red)" onclick="removeItem({{ r['id'] }})">Remove</button></div></div>
+        </article>
+        {% else %}<div class="empty-state" style="grid-column:1/-1"><div class="big">🖼️</div><strong>No portfolio items yet</strong><div>Add your first photo using the form.</div></div>{% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+bindImagePreview(document.getElementById('portfolioImage'),document.getElementById('portfolioPreview'));
+function submitPortfolio(e){var f=document.getElementById('portfolioImage');if(!f.files||!f.files.length){e.preventDefault();showToast('Choose a photo first.','error');return false;}var b=document.getElementById('portfolioBtn');b.disabled=true;b.innerHTML='<span class="spinner"></span> Uploading…';return true;}
+async function removeItem(id){if(!(await uiConfirm({title:'Remove this portfolio item?',message:'The photo will be deleted from your public profile.',okText:'Remove',danger:true})))return;const d=await api('/provider/portfolio/'+id+'/delete',{method:'POST'});if(!d.success){showToast(d.message||'Could not remove item.','error');return;}const el=document.getElementById('item-'+id);if(el){el.style.transition='opacity .3s, transform .3s';el.style.opacity='0';el.style.transform='scale(.96)';setTimeout(()=>{el.remove();if(!document.querySelectorAll('#portfolioGrid .portfolio-item').length)location.reload();},320);}showToast(d.message,'success');}
+</script>
+{% endblock %}
